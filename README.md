@@ -1,0 +1,227 @@
+# DOL foreign labor certification disclosure pipeline
+
+Pulls LCA (H-1B, H-1B1, E-3) and PERM case disclosure data from DOL OFLC,
+normalizes both into one table, and reports row counts so a rerun can be
+sanity-checked. Built to be rerun each quarter when DOL publishes a new
+release — see [Rerunning it](#rerunning-it-each-quarter).
+
+## Important: read this before the first real run
+
+This pipeline was built in a sandboxed session with **no network access to
+dol.gov** (blocked by org egress policy — confirmed via direct `curl`, not
+assumed). That means two things could not be done during the build and need
+a first pass from you, or from a session with real internet access:
+
+1. **Source URLs weren't verified live.** The pipeline doesn't hardcode
+   URLs — it scrapes
+   [the DOL performance page](https://www.dol.gov/agencies/eta/foreign-labor/performance)
+   for LCA/PERM disclosure and record-layout links (`src/discover_sources.py`)
+   and picks the most recent fiscal years automatically. That scraper is
+   written generically (any `<a href>` ending in `.xlsx`/`.xls`/`.pdf`,
+   classified by filename/link-text keywords) so it doesn't depend on guessing
+   the page's exact structure, but it has never run against the live page.
+   If it doesn't find the right files on first run, either fix the
+   classification rules in `discover_sources.py` or — faster — list the
+   files by hand in `config/sources_override.yaml`, which always takes
+   priority over scraping.
+
+2. **Column names weren't verified against the real record layout PDFs**,
+   especially for `PERM_REVISED` (the new ETA-9089 form, rolled out 2025).
+   `config/column_aliases.yaml` is seeded with the DOL LCA/PERM schema as
+   it's been stable since the FY2020 FLAG-system rollout, but the revised
+   PERM field names are a best-effort guess flagged `UNVERIFIED` in that
+   file. **The pipeline never silently guesses a column** — if a required
+   field can't be matched to a real header, it raises
+   `ColumnResolutionError` with the file's actual headers and the closest
+   fuzzy matches, and tells you exactly which line of
+   `column_aliases.yaml` to fix. Expect this to fire at least once on the
+   first live run against `PERM_REVISED` — check the downloaded layout PDF
+   in `data/raw/layouts/` and add the correct name.
+
+Everything downstream of column resolution — wage annualization, status
+classification, fiscal-year math, the combine/write/report step — is
+covered by unit tests with synthetic data (`tests/`, 30 tests, all passing)
+and doesn't depend on dol.gov being reachable, so that part is verified.
+
+## What it does
+
+1. **Discover** (`src/discover_sources.py`): scrape the DOL performance page
+   for LCA disclosure files (last 3 fiscal years), PERM disclosure files
+   (last 2 fiscal years, both the legacy and revised-ETA-9089 layouts where
+   both exist), and their record-layout PDFs. `config/sources_override.yaml`
+   can pin exact URLs instead.
+2. **Download** (`src/download.py`): fetch everything into `data/raw/`
+   (data files) and `data/raw/layouts/` (record layout PDFs, for reference).
+   Writes `data/raw/download_manifest.json`.
+3. **Parse + normalize** (`src/parse_lca.py`, `src/parse_perm.py`,
+   `src/normalize.py`): for each file, resolve DOL's actual column headers
+   to canonical fields via `src/columns.py` (alias-matched, case/whitespace
+   insensitive, fails loudly on a miss — never guesses), then transform to
+   the common schema below.
+4. **Combine + write**: concatenate all normalized files and write
+   `data/processed/dol_filings.parquet` and `.csv`.
+5. **Report** (`src/report.py`): row counts per source file and per
+   fiscal-year × program, written to `data/processed/run_report_latest.json`
+   and printed to the console.
+
+## Output schema
+
+One row per case, one file (`dol_filings.parquet` / `.csv`):
+
+| column | notes |
+|---|---|
+| `employer_raw` | as filed, no normalization yet (that's a separate pass) |
+| `program` | `LCA` or `PERM` |
+| `fiscal_year` | federal FY (Oct 1–Sep 30), derived from `decision_date` |
+| `decision_date` | parsed date |
+| `case_status` | normalized: `CERTIFIED`, `CERTIFIED-WITHDRAWN`, `DENIED`, `WITHDRAWN` |
+| `job_title_raw` | as filed |
+| `soc_code` | as filed |
+| `worksite_city` / `worksite_state` | as filed |
+| `wage_offered` | **annualized** — see below |
+| `wage_unit` | original unit of pay, kept for audit |
+| `wage_level` | prevailing wage level (I–IV), as filed |
+| `full_time_flag` | `True`/`False`/`None` |
+| `is_denied_or_withdrawn` | `True` for `DENIED`/`WITHDRAWN` rows |
+| `source_file` | which downloaded file the row came from |
+
+Rows with a `case_status` other than those four are dropped (disclosure
+files shouldn't contain anything else — if they do, it's counted in
+`dropped_unknown_status` in the report rather than silently kept).
+
+**Main counts vs. flagged rows**: `CERTIFIED` and `CERTIFIED-WITHDRAWN` rows
+have `is_denied_or_withdrawn = False`; `DENIED` and `WITHDRAWN` rows have
+`is_denied_or_withdrawn = True`. All four are in the same table — filter
+`~is_denied_or_withdrawn` for headline/main counts, keep the flag column
+around for denial-rate analysis later.
+
+### Wage annualization
+
+`wage_offered` = the "from" wage amount × a multiplier based on
+`wage_unit`, falling back to the "to" amount if "from" is missing:
+
+| unit | multiplier |
+|---|---|
+| Hour | 2080 |
+| Week | 52 |
+| Bi-Weekly | 26 |
+| Semi-Monthly | 24 |
+| Month | 12 |
+| Year | 1 |
+
+An unrecognized unit or missing amount produces `wage_offered = None`
+rather than defaulting to a multiplier of 1, which would silently
+understate hourly/weekly/monthly wages. See `src/wage.py`.
+
+## Setup
+
+```bash
+cd dol_pipeline
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Running it
+
+```bash
+python run_pipeline.py
+```
+
+Options:
+
+```bash
+python run_pipeline.py --force-download   # re-download even if files already exist in data/raw/
+python run_pipeline.py --lca-years 3 --perm-years 2
+python run_pipeline.py -v                 # verbose logging
+```
+
+On success it prints row counts per source file and per fiscal-year ×
+program, and writes:
+
+- `data/processed/dol_filings.parquet` / `.csv` — the combined table
+- `data/processed/run_report_latest.json` — the same counts as JSON
+- `data/raw/download_manifest.json` — what was downloaded and from where
+
+## Rerunning it each quarter
+
+Just run `python run_pipeline.py` again. Discovery re-scrapes the DOL page
+each time, so it naturally picks up whatever fiscal years/quarters are
+current — no code or URL edits needed in the normal case. Compare the new
+`run_report_latest.json` against the previous run's row counts as a sanity
+check (a big unexplained drop usually means a column stopped resolving and
+rows got dropped, not that filings actually dropped).
+
+If DOL changes a filename pattern enough that discovery fails, or renames
+a column enough that resolution fails, the pipeline stops with a specific,
+actionable error — fix the one thing it names (a classification rule, an
+override URL, or one alias entry) and rerun; it doesn't need a rewrite.
+
+## Testing
+
+```bash
+python -m pytest tests/ -v
+```
+
+30 tests cover wage annualization, status classification, fiscal-year math,
+column alias resolution (including the "DOL renamed a column and the alias
+isn't in the config yet" failure path), and a full synthetic-file
+integration test of the download→parse→normalize→combine→write→report path.
+
+## Employer name normalization (Session 2)
+
+Building on the row-level table above, `src/employer_normalize.py`,
+`src/employer_match.py`, and `src/employer_top_n.py` collapse the many
+legal-entity variants of one employer down to something matchable, and let
+free-text user input ("Amazon") resolve against it.
+
+- **`normalize_employer_name()`**: uppercase, punctuation → space (not
+  deleted — `AMAZON.COM` must not fuse into `AMAZONCOM`), collapse
+  whitespace, then repeatedly strip trailing legal-suffix tokens (`INC`,
+  `LLC`, `CORP`, `SERVICES`, `HOLDINGS`, `AND SUBSIDIARIES`, etc. — see
+  `_SUFFIX_PHRASES` in that file) so stacked suffixes like `... SERVICES
+  INC` fully strip, not just the last token.
+- **`src/employer_top_n.py`**: ranks normalized employers by main-count
+  filing volume (denied/withdrawn excluded) and writes
+  `data/processed/top_500_employers.csv` — the list to hand-build
+  `config/employer_aliases.yaml` from. **That config ships empty** because
+  this pipeline has never run against real DOL data in this sandbox (same
+  network constraint as Session 1) — there's no real filing volume to rank
+  yet. Run `run_pipeline.py` for real, then `write_top_employers()`, then
+  fill in the alias file by hand.
+- **`config/staffing_consulting_firms.yaml`**: a seeded (not empty) map of
+  well-known staffing/IT-consulting firms and their common abbreviations
+  (TCS → Tata Consultancy Services, Infosys, Cognizant, Deloitte, Wipro,
+  HCL, Capgemini, Accenture, and others) — checked before fuzzy matching so
+  these get flagged `is_staffing_or_consulting=True` rather than scored
+  like a direct employer. Expand it by hand the same way, from
+  `top_500_employers.csv` once that exists.
+- **`match_employer()`**: exact match against the staffing map, then the
+  alias map, then `rapidfuzz.fuzz.token_set_ratio` fuzzy matching (default
+  threshold 90/100) against the combined pool. Below threshold, it returns
+  `matched=False` plus the 5 closest candidates — **it never guesses**. A
+  confident wrong answer ("this company doesn't sponsor" when it does) is
+  worse than admitting uncertainty.
+
+Demo: `python scripts/demo_session2_employer_match.py` runs the exact 10
+inputs from the build brief (Amazon, Google, Deloitte, TCS, Infosys, Meta,
+JPMorgan, Capital One, Cognizant, Walmart) against a small **synthetic**
+alias-map fixture (clearly labeled in the script — real filer-name
+variants for these companies, not pulled from a live file, since none was
+reachable) plus the real staffing/consulting config. All 10 resolve; the 4
+staffing/consulting firms come back flagged. Tests in
+`tests/test_employer_normalize.py`, `tests/test_employer_match.py`, and
+`tests/test_employer_top_n.py` cover the same ground without needing the
+demo fixture.
+
+## Known limitations / next steps
+
+- Role-bucket classification and the five signals are separate follow-on
+  passes (Sessions 3–4 in the build brief), not part of this pipeline yet.
+- `PERM_REVISED` column aliases are unverified against the live record
+  layout PDF (see above) — expect to fix this on first real run.
+- Discovery has never run against the live DOL page — same caveat.
+- `config/employer_aliases.yaml` (the real top-500 alias map) is empty
+  until the pipeline has run against real data once — see above.
+- USCIS H-1B Employer Data Hub (approvals/denials) isn't pulled here; it's
+  a separate source for a later pass (signal 5 in the build brief).

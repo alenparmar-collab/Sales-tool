@@ -1,0 +1,73 @@
+# Known staffing / IT-consulting / professional-services firms whose
+# "does this employer sponsor" answer is different in kind from a direct
+# employer: they file LCAs/PERM to place consultants at client sites, so
+# heavy filing volume doesn't mean the jobs are at the firm named. These get
+# flagged rather than scored (per build brief signal philosophy).
+#
+# This is a seed list of well-known firms plus the common abbreviations
+# users actually type (TCS, not "Tata Consultancy Services"). Checked
+# before fuzzy matching, exact on normalized abbreviation or name. Expand
+# by hand the same way as employer_aliases.yaml -- after the pipeline has
+# run against real data, check data/processed/top_500_employers.csv for
+# other staffing/consulting firms in the top 500 and add them here.
+
+firms:
+  - canonical: "Tata Consultancy Services"
+    abbreviations: ["TCS"]
+    normalized_variants: ["TATA CONSULTANCY"]
+
+  - canonical: "Infosys"
+    abbreviations: ["INFOSYS", "INFY"]
+    normalized_variants: ["INFOSYS", "INFOSYS BPM"]
+
+  - canonical: "Cognizant"
+    abbreviations: ["COGNIZANT", "CTS"]
+    normalized_variants: ["COGNIZANT TECHNOLOGY", "COGNIZANT TECHNOLOGY US"]
+
+  - canonical: "Deloitte"
+    abbreviations: ["DELOITTE"]
+    normalized_variants: ["DELOITTE CONSULTING", "DELOITTE TAX", "DELOITTE TOUCHE", "DELOITTE"]
+
+  - canonical: "Wipro"
+    abbreviations: ["WIPRO"]
+    normalized_variants: ["WIPRO", "WIPRO LIMITED"]
+
+  - canonical: "HCL Technologies"
+    abbreviations: ["HCL"]
+    normalized_variants: ["HCL AMERICA", "HCL"]
+
+  - canonical: "Capgemini"
+    abbreviations: ["CAPGEMINI"]
+    normalized_variants: ["CAPGEMINI AMERICA", "CAPGEMINI"]
+
+  - canonical: "Accenture"
+    abbreviations: ["ACCENTURE"]
+    normalized_variants: ["ACCENTURE LLP", "ACCENTURE"]
+
+  - canonical: "Tech Mahindra"
+    abbreviations: ["TECH MAHINDRA", "TECHM"]
+    normalized_variants: ["TECH MAHINDRA AMERICAS", "TECH MAHINDRA"]
+
+  - canonical: "LTIMindtree"
+    abbreviations: ["LTIMINDTREE", "LTI", "MINDTREE"]
+    normalized_variants: ["LTIMINDTREE", "MINDTREE", "LARSEN TOUBRO INFOTECH"]
+
+  - canonical: "Genpact"
+    abbreviations: ["GENPACT"]
+    normalized_variants: ["GENPACT"]
+
+  - canonical: "Mphasis"
+    abbreviations: ["MPHASIS"]
+    normalized_variants: ["MPHASIS"]
+
+  - canonical: "Virtusa"
+    abbreviations: ["VIRTUSA"]
+    normalized_variants: ["VIRTUSA"]
+
+  - canonical: "Randstad"
+    abbreviations: ["RANDSTAD"]
+    normalized_variants: ["RANDSTAD"]
+
+  - canonical: "ManpowerGroup"
+    abbreviations: ["MANPOWER"]
+    normalized_variants: ["MANPOWERGROUP", "MANPOWER"]

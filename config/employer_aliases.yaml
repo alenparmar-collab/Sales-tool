@@ -1,0 +1,23 @@
+# Hand-built alias map: normalized employer-name variants -> one canonical
+# employer. Built by hand from data/processed/top_500_employers.csv after
+# running src/employer_top_n.py against real pipeline output (this file
+# starts empty because this pipeline has never run against real DOL data --
+# see README.md).
+#
+# Structure: each entry is a canonical employer with a list of normalized
+# name variants (as produced by employer_normalize.normalize_employer_name)
+# that should all resolve to it. is_staffing_or_consulting marks employers
+# whose answer to "does this company sponsor" is different in kind (they
+# file on behalf of client placements) -- these get flagged, not scored.
+#
+# Example (fill in for real once top_500_employers.csv exists):
+# - canonical: "Amazon"
+#   employer_id: amazon
+#   is_staffing_or_consulting: false
+#   variants:
+#     - "AMAZON COM"
+#     - "AMAZON WEB"
+#     - "AMAZON DEVELOPMENT CENTER U S"
+#     - "AMAZON DATA"
+
+employers: []

@@ -1,0 +1,20 @@
+# Optional manual override for source file URLs.
+#
+# The pipeline normally discovers files itself by scraping
+# https://www.dol.gov/agencies/eta/foreign-labor/performance for LCA and
+# PERM disclosure links (see src/discover_sources.py). If that scrape ever
+# breaks (DOL changes the page layout) or you just want to pin specific
+# files, list them here -- entries here take priority over discovery.
+#
+# kind must be one of: LCA, PERM_LEGACY, PERM_REVISED
+#
+# Example:
+# files:
+#   - url: "https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/LCA_Disclosure_Data_FY2026_Q3.xlsx"
+#     kind: LCA
+#     fiscal_year: 2026
+#   - url: "https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/PERM_Disclosure_Data_FY2026_Q3.xlsx"
+#     kind: PERM_REVISED
+#     fiscal_year: 2026
+
+files: []

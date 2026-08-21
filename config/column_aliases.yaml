@@ -1,0 +1,69 @@
+# Canonical field -> list of known source-file header aliases, per file kind.
+#
+# WHY THIS FILE EXISTS: DOL renames columns between fiscal years (e.g. FLAG-era
+# LCA files vs pre-2020 iCERT files, and now the legacy vs revised ETA-9089
+# PERM layout). Rather than hardcoding one set of column names in Python, the
+# pipeline resolves each canonical field against whatever headers actually
+# show up in a downloaded file, tried in order, matched after normalizing
+# (uppercase, strip everything but letters/digits). If NONE of the aliases
+# for a *required* field match, the pipeline stops and prints the file's
+# real headers plus the closest fuzzy matches -- add the missing name here
+# and rerun. It never silently guesses a column.
+#
+# PERM_LEGACY = old ETA-9089 form layout.
+# PERM_REVISED = revised ETA-9089 form layout (rolled out 2025).
+#
+# VERIFY-ON-FIRST-RUN: the LCA and PERM_LEGACY alias lists below are based on
+# the FLAG-era record layout that has been stable since FY2020. The
+# PERM_REVISED list is a best-effort guess (this pipeline was built in a
+# sandbox with no network access to dol.gov, so the actual
+# PERM_Record_Layout_*_Revised.pdf could not be read). Check it against the
+# downloaded layout PDF in data/raw/layouts/ the first time a PERM_REVISED
+# file is processed, and fix any misses here.
+
+LCA:
+  case_number: [CASE_NUMBER, CASE_NO]
+  case_status: [CASE_STATUS]
+  decision_date: [DECISION_DATE, ORIGINAL_CERT_DATE]
+  visa_class: [VISA_CLASS]
+  employer_raw: [EMPLOYER_NAME, EMPLOYER_BUSINESS_NAME]
+  job_title_raw: [JOB_TITLE]
+  soc_code: [SOC_CODE]
+  worksite_city: [WORKSITE_CITY]
+  worksite_state: [WORKSITE_STATE, WORKSITE_STATE_ABBREVIATION, WORKSITE_STATE_FULL]
+  wage_from: [WAGE_RATE_OF_PAY_FROM, WAGE_RATE_OF_PAY_FROM_1]
+  wage_to: [WAGE_RATE_OF_PAY_TO, WAGE_RATE_OF_PAY_TO_1]
+  wage_unit: [WAGE_UNIT_OF_PAY, WAGE_UNIT_OF_PAY_1]
+  wage_level: [PW_WAGE_LEVEL]
+  full_time_flag: [FULL_TIME_POSITION, FULL_TIME_POSITION_Y_N]
+
+PERM_LEGACY:
+  case_number: [CASE_NUMBER, CASE_NO]
+  case_status: [CASE_STATUS]
+  decision_date: [DECISION_DATE]
+  employer_raw: [EMPLOYER_NAME]
+  job_title_raw: [JOB_INFO_JOB_TITLE, JOB_TITLE]
+  soc_code: [PW_SOC_CODE, SOC_CODE]
+  worksite_city: [JOB_INFO_WORK_CITY, WORKSITE_CITY]
+  worksite_state: [JOB_INFO_WORK_STATE, WORKSITE_STATE]
+  wage_from: [WAGE_OFFER_FROM_9089, WAGE_OFFERED_FROM_9089]
+  wage_to: [WAGE_OFFER_TO_9089, WAGE_OFFERED_TO_9089]
+  wage_unit: [WAGE_OFFER_UNIT_OF_PAY_9089, WAGE_OFFERED_UNIT_OF_PAY_9089]
+  wage_level: [PW_LEVEL_9089]
+  full_time_flag: [FULL_TIME_POSITION_9089, FT_POSITION_9089]
+
+# UNVERIFIED -- confirm against data/raw/layouts/PERM_Record_Layout_*_Revised.pdf
+PERM_REVISED:
+  case_number: [CASE_NUMBER, CASE_NO]
+  case_status: [CASE_STATUS]
+  decision_date: [DECISION_DATE]
+  employer_raw: [EMPLOYER_NAME, EMPLOYER_BUSINESS_NAME]
+  job_title_raw: [JOB_TITLE, JOB_INFO_JOB_TITLE]
+  soc_code: [SOC_CODE, PW_SOC_CODE]
+  worksite_city: [WORKSITE_CITY, JOB_INFO_WORK_CITY]
+  worksite_state: [WORKSITE_STATE, JOB_INFO_WORK_STATE]
+  wage_from: [WAGE_OFFERED_FROM, WAGE_OFFER_FROM_9089, WAGE_RATE_OF_PAY_FROM]
+  wage_to: [WAGE_OFFERED_TO, WAGE_OFFER_TO_9089, WAGE_RATE_OF_PAY_TO]
+  wage_unit: [WAGE_OFFERED_UNIT_OF_PAY, WAGE_OFFER_UNIT_OF_PAY_9089, WAGE_UNIT_OF_PAY]
+  wage_level: [PW_WAGE_LEVEL, PW_LEVEL_9089]
+  full_time_flag: [FULL_TIME_POSITION, FULL_TIME_POSITION_9089]
