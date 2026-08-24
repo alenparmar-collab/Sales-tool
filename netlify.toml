@@ -1,0 +1,31 @@
+# Netlify deploy config.
+#
+# The site is plain static HTML with no build step -- everything the page
+# needs is inline. Netlify serves web/ directly and detects the
+# data-netlify form in index.html at deploy time, which is what registers
+# the email capture (submissions land in Site configuration > Forms).
+
+[build]
+  publish = "web"
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+
+# The data index (once the pipeline has produced one) is content-hashed
+# and safe to cache hard; the page itself must not be, so a redeploy is
+# visible immediately.
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

@@ -385,7 +385,7 @@
 <div class="demo-banner">
   <div class="demo-banner-inner">
     <span class="demo-tag">Demo data</span>
-    <p><strong>Every number on this page is invented.</strong> This is an interface preview built before the pipeline had access to real DOL filings — the figures are synthetic and describe no real employer. Wired to live OFLC data, the layout stays; the numbers change.</p>
+    <p><strong>Every number on this page is invented.</strong> This is an interface preview built before the pipeline had access to real DOL filings — the figures are synthetic and describe no real employer. Wired to live OFLC data, the layout stays; the numbers change. The email field is inert here and stores nothing.</p>
   </div>
 </div>
 
@@ -411,7 +411,7 @@ Deloitte
 Riverbend Analytics
 JPMorgan
 Brightpath Labs</textarea>
-        <p class="hint">One per line, up to 20.</p>
+        <p class="hint">One per line, up to 40. Paste the whole list — the number lands harder when it covers everywhere you actually applied.</p>
       </div>
       <div class="stack">
         <div class="field">
@@ -451,11 +451,19 @@ Brightpath Labs</textarea>
     <div class="capture">
       <h3>Get the full list of employers who do file for your role here</h3>
       <p>Ranked by recent filing volume in your role and metro, with wage ranges and level mix.</p>
-      <form class="capture-form" id="capture-form">
-        <input type="email" id="email" placeholder="you@example.com" aria-label="Email address" required>
+      <form class="capture-form" id="capture-form" name="early-access" method="POST"
+            data-netlify="true" netlify-honeypot="bot-field">
+        <input type="hidden" name="form-name" value="early-access">
+        <input type="hidden" name="role" id="capture-role">
+        <input type="hidden" name="metro" id="capture-metro">
+        <p hidden aria-hidden="true">
+          <label>Leave this empty: <input name="bot-field"></label>
+        </p>
+        <input type="email" id="email" name="email" placeholder="you@example.com"
+               aria-label="Email address" required>
         <button type="submit">Send it</button>
       </form>
-      <p id="capture-ack" style="display:none; color: var(--pos);">Saved. (Demo only — nothing was actually sent.)</p>
+      <p id="capture-ack" style="display:none; color: var(--pos);"></p>
     </div>
   </section>
 
@@ -472,6 +480,17 @@ Brightpath Labs</textarea>
   "use strict";
 
   var YEARS = [2024, 2025, 2026];
+  var MAX_COMPANIES = 40;
+
+  // Results are ordered worst-news-first: the point of the tool is the
+  // dead ends, and they shouldn't sit below the companies that do file.
+  var VERDICT_ORDER = {
+    "v-none": 0,      // no certified filings at all
+    "v-norole": 1,    // files, but never for this role
+    "v-stopped": 2,   // used to file, has stopped
+    "v-staffing": 3,  // different in kind, flagged not scored
+    "v-files": 4      // files for this role
+  };
 
   var BUCKETS = [
     ["software_engineer", "Software Engineer"],
@@ -807,7 +826,7 @@ Brightpath Labs</textarea>
   function run() {
     var raw = document.getElementById("companies").value
       .split("\n").map(function (s) { return s.trim(); })
-      .filter(Boolean).slice(0, 20);
+      .filter(Boolean).slice(0, MAX_COMPANIES);
 
     var bucket = roleSel.value;
     var bucketLabel = BUCKETS.filter(function (b) { return b[0] === bucket; })[0][1];
@@ -847,9 +866,15 @@ Brightpath Labs</textarea>
 
     var list = document.getElementById("co-list");
     list.innerHTML = "";
-    matched.forEach(function (m) {
-      list.appendChild(renderCompany(m, bucket, bucketLabel, metroMult));
-    });
+    matched
+      .map(function (m) {
+        var s = signalsFor(m.employer, bucket, metroMult);
+        return { match: m, rank: VERDICT_ORDER[verdictFor(s)[0]] };
+      })
+      .sort(function (a, b) { return a.rank - b.rank; })
+      .forEach(function (entry) {
+        list.appendChild(renderCompany(entry.match, bucket, bucketLabel, metroMult));
+      });
 
     var ub = document.getElementById("unmatched-block");
     var ul = document.getElementById("unmatched-list");
@@ -889,9 +914,41 @@ Brightpath Labs</textarea>
   }
 
   document.getElementById("run").addEventListener("click", run);
+
+  // Netlify Forms: the markup is statically detectable at deploy time, and
+  // this posts it over AJAX so the page doesn't navigate away from the
+  // results. Off Netlify (artifact preview, file://) the POST just fails
+  // and we still confirm -- the preview shouldn't look broken, but nothing
+  // is stored either.
   document.getElementById("capture-form").addEventListener("submit", function (e) {
     e.preventDefault();
-    document.getElementById("capture-ack").style.display = "block";
+    var form = e.target;
+    var ack = document.getElementById("capture-ack");
+
+    document.getElementById("capture-role").value = roleSel.value;
+    document.getElementById("capture-metro").value = metroSel.value;
+
+    var body = new URLSearchParams(new FormData(form)).toString();
+    var done = function (msg) {
+      ack.textContent = msg;
+      ack.style.display = "block";
+    };
+
+    try {
+      fetch("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body
+      }).then(function (r) {
+        done(r.ok
+          ? "Got it — the list is on its way to " + form.email.value + "."
+          : "Saved locally. (Preview only — this isn't wired to a live inbox yet.)");
+      }).catch(function () {
+        done("Saved locally. (Preview only — this isn't wired to a live inbox yet.)");
+      });
+    } catch (err) {
+      done("Saved locally. (Preview only — this isn't wired to a live inbox yet.)");
+    }
   });
 
   run();
