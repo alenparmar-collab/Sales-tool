@@ -14,6 +14,9 @@ from .status import is_denied_or_withdrawn, is_known_status, normalize_status
 from .wage import annualize_wage_series
 
 TARGET_COLUMNS = [
+    # Carried through so overlapping releases can be de-duplicated and any
+    # individual row traced back to DOL's own record.
+    "case_number",
     "employer_raw",
     "program",
     "fiscal_year",
@@ -67,6 +70,7 @@ def normalize_file(
     normalized_status = _get_or_blank(raw_df, resolved, "case_status").map(normalize_status)
 
     out = pd.DataFrame(index=raw_df.index)
+    out["case_number"] = _clean_str(_get_or_blank(raw_df, resolved, "case_number"))
     out["employer_raw"] = _clean_str(_get_or_blank(raw_df, resolved, "employer_raw"))
     out["program"] = program
     out["decision_date"] = pd.to_datetime(

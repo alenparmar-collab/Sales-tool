@@ -73,6 +73,27 @@ def run(
 
     combined_df = pd.concat(normalized_frames, ignore_index=True)
 
+    # Backstop against overlapping releases. Source selection already keeps
+    # only one file per fiscal year because the quarterly releases are
+    # cumulative, but a case counted twice would inflate exactly the number
+    # this product reports, so it is checked rather than assumed. A large
+    # count here means the cumulative assumption in
+    # discover_sources._latest_per_fiscal_year needs re-examining.
+    rows_before = len(combined_df)
+    has_case = combined_df["case_number"].notna() & (combined_df["case_number"] != "")
+    dupe_mask = combined_df.loc[has_case].duplicated(subset=["case_number"], keep="first")
+    duplicate_rows = int(dupe_mask.sum())
+    if duplicate_rows:
+        combined_df = combined_df.drop(
+            index=combined_df.loc[has_case].index[dupe_mask]
+        ).reset_index(drop=True)
+        logger.warning(
+            "Dropped %d duplicate case_number rows (%.2f%% of %d).",
+            duplicate_rows,
+            100 * duplicate_rows / rows_before,
+            rows_before,
+        )
+
     combined_df["employer_normalized"] = combined_df["employer_raw"].map(normalize_employer_name)
     combined_df = classify_dataframe(combined_df)
 
@@ -87,6 +108,7 @@ def run(
     logger.info("Wrote %s and %s", top_employers_path, unmatched_path)
 
     report = build_report(per_file_stats, combined_df)
+    report["duplicate_case_numbers_dropped"] = duplicate_rows
     write_report(report)
     print_report(report)
 

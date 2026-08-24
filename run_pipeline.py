@@ -21,6 +21,80 @@ from src.download import DownloadError  # noqa: E402
 from src.pipeline import run  # noqa: E402
 
 
+def report_headers(page_url: str, lca_years: int, perm_years: int) -> int:
+    """Download each selected data file, print its real header row, delete it.
+
+    This exists because the column aliases were written without ever having
+    seen a real file, and one guess in particular is load-bearing: whether
+    PERM_Disclosure_Data_FY2025_Q4.xlsx uses the legacy ETA-9089 layout or
+    the revised one. The filename alone can't answer that. The header row
+    can, and reading it costs one pass instead of a series of failed full
+    runs that each surface one missing column at a time.
+
+    Files are deleted immediately after reading so disk stays flat, and
+    only the header row is loaded so memory does too.
+    """
+    import openpyxl
+    import requests
+
+    from src.columns import _normalize, load_alias_config
+    from src.discover_sources import USER_AGENT, get_sources
+    from src.download import RAW_DIR
+
+    sources = [
+        s
+        for s in get_sources(page_url=page_url, lca_years=lca_years, perm_years=perm_years)
+        if s.kind != "LAYOUT"
+    ]
+    alias_config = load_alias_config()
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+
+    for s in sorted(sources, key=lambda x: (x.kind, x.fiscal_year or 0)):
+        name = s.url.split("/")[-1].split("?")[0]
+        dest = RAW_DIR / name
+        print(f"\n{'=' * 78}\n{s.kind}  FY{s.fiscal_year}  {name}\n{'=' * 78}")
+
+        try:
+            with requests.get(
+                s.url, timeout=600, headers={"User-Agent": USER_AGENT}, stream=True
+            ) as r:
+                r.raise_for_status()
+                with open(dest, "wb") as fh:
+                    for chunk in r.iter_content(chunk_size=1 << 20):
+                        fh.write(chunk)
+
+            wb = openpyxl.load_workbook(dest, read_only=True)
+            ws = wb[wb.sheetnames[0]]
+            headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
+            wb.close()
+
+            print(f"sheet: {wb.sheetnames[0]}   columns: {len(headers)}\n")
+            for h in headers:
+                print(f"  {h}")
+
+            # Which canonical fields would resolve against this file, and
+            # which would not -- the actionable part.
+            aliases = alias_config.get(s.kind, {})
+            present = {_normalize(h) for h in headers if h}
+            missing = [
+                field
+                for field, cands in aliases.items()
+                if not any(_normalize(c) in present for c in cands)
+            ]
+            if missing:
+                print(f"\n  !! UNRESOLVED for kind={s.kind}: {missing}")
+            else:
+                print(f"\n  OK: every {s.kind} alias resolves against this file.")
+
+        except Exception as e:  # noqa: BLE001 - report and continue to next file
+            print(f"  FAILED: {type(e).__name__}: {e}")
+        finally:
+            if dest.exists():
+                dest.unlink()
+
+    return 0
+
+
 def discover_only(page_url: str, lca_years: int, perm_years: int) -> int:
     """Report what discovery finds without downloading it.
 
@@ -102,6 +176,13 @@ def main() -> int:
         "big they are, then stop. Downloads nothing. Use this to sanity-check "
         "discovery and size the real run before committing to it.",
     )
+    parser.add_argument(
+        "--report-headers",
+        action="store_true",
+        help="Download each selected data file, print its real column headers and "
+        "which canonical fields fail to resolve, then delete it. Use this to fix "
+        "config/column_aliases.yaml from facts instead of one failed run at a time.",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -109,6 +190,17 @@ def main() -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    if args.report_headers:
+        try:
+            return report_headers(
+                page_url=args.page_url,
+                lca_years=args.lca_years,
+                perm_years=args.perm_years,
+            )
+        except SourceDiscoveryError as e:
+            print(f"\nSOURCE DISCOVERY FAILED: {e}", file=sys.stderr)
+            return 2
 
     if args.discover_only:
         try:

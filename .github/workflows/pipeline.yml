@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "discover = list files and sizes only (fast, safe). full = download and process everything."
+        description: "discover = list files and sizes (fast). headers = read real column names. full = download and process everything."
         required: true
         default: discover
         type: choice
-        options: [discover, full]
+        options: [discover, headers, full]
       lca_years:
         description: "How many fiscal years of LCA data"
         required: false
@@ -47,9 +47,21 @@ jobs:
           echo "--- memory ---"; free -h
           echo "--- cpu ---";   nproc
 
+      # Cheap guard: the pipeline's own logic is what turns raw files into
+      # filing counts, so a broken assumption here is worth catching before
+      # a 40-minute download rather than after.
+      - name: Run tests
+        run: |
+          pip install pytest
+          python -m pytest tests/ -q
+
       - name: Discover source files
         if: inputs.mode == 'discover'
         run: python run_pipeline.py --discover-only --lca-years "${{ inputs.lca_years }}" --perm-years "${{ inputs.perm_years }}"
+
+      - name: Report real column headers
+        if: inputs.mode == 'headers'
+        run: python run_pipeline.py --report-headers --lca-years "${{ inputs.lca_years }}" --perm-years "${{ inputs.perm_years }}"
 
       - name: Run full pipeline
         if: inputs.mode == 'full'

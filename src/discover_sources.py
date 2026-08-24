@@ -31,6 +31,7 @@ USER_AGENT = "Mozilla/5.0 (compatible; MediNext-DOL-Pipeline/1.0; +https://medin
 OVERRIDE_PATH = Path(__file__).resolve().parent.parent / "config" / "sources_override.yaml"
 
 FY_PATTERN = re.compile(r"FY\s?(20\d{2})", re.IGNORECASE)
+QUARTER_PATTERN = re.compile(r"[_\-\s]Q([1-4])\b", re.IGNORECASE)
 
 
 class SourceDiscoveryError(RuntimeError):
@@ -43,13 +44,19 @@ class SourceFile:
     kind: str  # LCA, PERM_LEGACY, PERM_REVISED, LAYOUT
     fiscal_year: Optional[int]
     link_text: str
+    quarter: Optional[int] = None
 
 
 def _classify(url: str, link_text: str) -> Optional[str]:
     haystack = f"{url} {link_text}".upper()
 
     if haystack.endswith(".PDF") or ".PDF" in haystack.split("?")[0]:
-        if "RECORD_LAYOUT" in haystack or "RECORD LAYOUT" in haystack:
+        if "RECORD_LAYOUT" not in haystack and "RECORD LAYOUT" not in haystack:
+            return None
+        # Only LCA and PERM layouts are relevant. DOL publishes layouts for
+        # every program on the same page (H-2A, H-2B, CW-1, PW), and the
+        # brief explicitly excludes those -- wrong programs, wrong buyer.
+        if "PERM" in haystack or "LCA" in haystack:
             return "LAYOUT"
         return None
 
@@ -72,6 +79,48 @@ def _extract_fiscal_year(url: str, link_text: str) -> Optional[int]:
         if m:
             return int(m.group(1))
     return None
+
+
+def _extract_quarter(url: str, link_text: str) -> Optional[int]:
+    """Quarter number from a filename like ..._FY2025_Q3.xlsx.
+
+    Returns None when a file carries no quarter marker; such a file is
+    treated as the final/whole-year release (see _latest_per_fiscal_year).
+    """
+    for haystack in (link_text, url):
+        m = QUARTER_PATTERN.search(haystack)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _latest_per_fiscal_year(files: List[SourceFile]) -> List[SourceFile]:
+    """Keep only the newest quarterly release per (kind, fiscal year).
+
+    OFLC's quarterly disclosure files are cumulative year-to-date, not
+    per-quarter increments: the FY2026 Q3 file covers Oct 1 2025 through
+    Jun 30 2026, i.e. Q1+Q2+Q3. Downloading Q1..Q4 of one fiscal year and
+    concatenating them would therefore count early-year cases several
+    times over and silently inflate every employer's filing volume --
+    which is the whole number this product reports.
+
+    A file with no quarter marker sorts highest, on the assumption it is
+    the consolidated annual release.
+
+    This assumption is worth re-checking against the per-file row counts in
+    the run report: if the kept file's row count is roughly a single
+    quarter rather than a full year, the files are incremental after all
+    and this needs revisiting. The case_number de-duplication in the
+    pipeline is the backstop either way.
+    """
+    best: dict = {}
+    for f in files:
+        key = (f.kind, f.fiscal_year)
+        rank = f.quarter if f.quarter is not None else 99
+        current = best.get(key)
+        if current is None or rank > (current.quarter if current.quarter is not None else 99):
+            best[key] = f
+    return list(best.values())
 
 
 def fetch_page_links(page_url: str = PERFORMANCE_PAGE) -> List[SourceFile]:
@@ -99,7 +148,10 @@ def fetch_page_links(page_url: str = PERFORMANCE_PAGE) -> List[SourceFile]:
         if kind is None:
             continue
         fy = _extract_fiscal_year(full_url, link_text)
-        found.append(SourceFile(url=full_url, kind=kind, fiscal_year=fy, link_text=link_text))
+        q = _extract_quarter(full_url, link_text)
+        found.append(
+            SourceFile(url=full_url, kind=kind, fiscal_year=fy, link_text=link_text, quarter=q)
+        )
 
     if not found:
         raise SourceDiscoveryError(
@@ -133,13 +185,18 @@ def select_sources(
     perm_legacy_years = top_fiscal_years("PERM_LEGACY", perm_years)
     perm_revised_years = top_fiscal_years("PERM_REVISED", perm_years)
 
-    selected = [f for f in all_links if f.kind == "LCA" and f.fiscal_year in lca_keep_years]
-    selected += [
+    data_files = [f for f in all_links if f.kind == "LCA" and f.fiscal_year in lca_keep_years]
+    data_files += [
         f for f in all_links if f.kind == "PERM_LEGACY" and f.fiscal_year in perm_legacy_years
     ]
-    selected += [
+    data_files += [
         f for f in all_links if f.kind == "PERM_REVISED" and f.fiscal_year in perm_revised_years
     ]
+
+    # One file per (kind, fiscal year) -- the quarterly releases are
+    # cumulative, so keeping all four would multi-count. See
+    # _latest_per_fiscal_year.
+    selected = _latest_per_fiscal_year(data_files)
     selected += layouts
 
     if not any(f.kind == "LCA" for f in selected):

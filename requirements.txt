@@ -1,7 +1,13 @@
-pandas>=2.0
-openpyxl>=3.1
-requests>=2.31
-beautifulsoup4>=4.12
-PyYAML>=6.0
+# Upper bounds are deliberate. A CI runner resolved pandas 3.0.5 against a
+# bare `pandas>=2.0` while everything here was written and tested on 2.x,
+# and pandas 3 changes default dtypes and copy semantics -- exactly the
+# kind of silent shift that produces wrong filing counts rather than a
+# crash. Lift these only alongside a green test run on the new major.
+pandas>=2.0,<3.0
+numpy>=1.26,<3.0
+openpyxl>=3.1,<4.0
+requests>=2.31,<3.0
+beautifulsoup4>=4.12,<5.0
+PyYAML>=6.0,<7.0
 pyarrow>=14.0
-rapidfuzz>=3.5
+rapidfuzz>=3.5,<4.0
