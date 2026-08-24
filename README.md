@@ -214,10 +214,55 @@ staffing/consulting firms come back flagged. Tests in
 `tests/test_employer_top_n.py` cover the same ground without needing the
 demo fixture.
 
+## Role bucket classification (Session 3)
+
+`src/role_taxonomy.py` classifies each filing into one of 16 role buckets
+and pulls seniority into its own column. Everything is configured in
+`config/role_taxonomy.yaml` — synonyms and SOC mappings are editable
+without touching code.
+
+**Seniority first**: `senior`, `sr`, `lead`, `staff`, `principal`,
+`junior`, `jr`, `associate`, `entry`/`entry level` are stripped out of the
+title into a `seniority` column — kept, not discarded, since it feeds the
+"do they file at this level" signal later. `Sr. Data Engineer` → seniority
+`senior`, title `DATA ENGINEER`.
+
+**Then the bucket**, in this order (recorded per row in
+`role_match_source` so a review pass can see *why* something landed where
+it did):
+
+1. `soc_clean` — SOC codes that map unambiguously to one bucket (15-2051
+   Data Scientists, 17-2141 Mechanical Engineers). These win outright.
+2. `keyword` — phrase match against the stripped title, **longest phrase
+   first**, so `DATA ENGINEER` beats a bare `ENGINEER` and `MACHINE
+   LEARNING ENGINEER` beats `DATA`.
+3. `soc_coarse` — broad SOC codes (15-1252 Software Developers) used
+   *only* as a fallback default. This ordering is the point: it lets a
+   title keyword refine within a coarse SOC instead of being overruled by
+   it, so `Sr. QA Automation Engineer` filed under 15-1252 correctly lands
+   in `qa_engineer`, not `software_engineer` — exactly the distinction
+   signal 2 depends on.
+4. `other` — everything else, logged for review.
+
+SOC codes are compared on digits only, so `15-2051`, `15-2051.00`, and
+`152051` all match the same rule.
+
+**The review loop**: every pipeline run writes
+`data/processed/unmatched_titles_top_100.csv` — the most common titles
+that fell through to `other`, with their SOC codes. Per the build brief,
+reviewing that list once and hand-adding the top entries to
+`config/role_taxonomy.yaml` is worth more than any cleverer matching
+algorithm. Each run also writes `top_500_employers.csv` for the employer
+alias pass described above.
+
 ## Known limitations / next steps
 
-- Role-bucket classification and the five signals are separate follow-on
-  passes (Sessions 3–4 in the build brief), not part of this pipeline yet.
+- The five signals are a follow-on pass (Session 4 in the build brief),
+  not part of this pipeline yet.
+- The role taxonomy's synonym lists are a reasonable first pass but have
+  never been reviewed against real filing titles — that's what the
+  `unmatched_titles_top_100.csv` loop above is for, after the first real
+  run.
 - `PERM_REVISED` column aliases are unverified against the live record
   layout PDF (see above) — expect to fix this on first real run.
 - Discovery has never run against the live DOL page — same caveat.

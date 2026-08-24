@@ -1,0 +1,246 @@
+# Role bucket classification config. Editable by hand -- no code changes
+# needed to add a synonym or retune a SOC mapping.
+#
+# CLASSIFICATION ORDER (see src/role_taxonomy.py):
+#   1. soc_clean  -- SOC codes that map unambiguously to exactly one bucket.
+#      These win outright; title keywords cannot override them.
+#   2. keywords   -- phrase match against the title (seniority already
+#      stripped), longest phrase first.
+#   3. soc_coarse -- SOC codes too broad to decide alone (15-1252 covers a
+#      QA tester and a principal engineer alike). Used only as a fallback
+#      default when no keyword matched, so keywords refine within them.
+#   4. other      -- logged to data/processed/unmatched_titles_top_100.csv
+#      for hand-adding to the keyword lists below.
+#
+# Titles are normalized before matching: uppercased, punctuation to space,
+# whitespace collapsed, seniority tokens removed (kept in their own column).
+
+seniority_tokens:
+  senior: [SENIOR, SR]
+  lead: [LEAD]
+  staff: [STAFF]
+  principal: [PRINCIPAL]
+  junior: [JUNIOR, JR]
+  associate: [ASSOCIATE]
+  entry: [ENTRY, ENTRY LEVEL]
+
+# SOC codes that decide the bucket on their own.
+soc_clean:
+  "15-2051": data_scientist          # Data Scientists
+  "15-1243": data_engineer           # Database Architects
+  "15-1242": data_engineer           # Database Administrators
+  "15-1212": security_engineer       # Information Security Analysts
+  "15-1244": devops_sre              # Network and Computer Systems Administrators
+  "13-2051": finance_analyst         # Financial and Investment Analysts
+  "13-2054": finance_analyst         # Financial Risk Specialists
+  "11-9111": healthcare_admin        # Medical and Health Services Managers
+  "17-2141": mechanical_engineer     # Mechanical Engineers
+  "17-2071": electrical_engineer     # Electrical Engineers
+  "17-2072": electrical_engineer     # Electronics Engineers
+  "17-2051": civil_engineer          # Civil Engineers
+  "11-2021": product_manager         # Marketing Managers (PM-adjacent filings)
+
+# SOC codes too coarse to decide alone -- a default only if no keyword hits.
+soc_coarse:
+  "15-1252": software_engineer       # Software Developers
+  "15-1251": software_engineer       # Computer Programmers
+  "15-1253": qa_engineer             # Software QA Analysts and Testers
+  "15-1211": business_analyst        # Computer Systems Analysts
+  "15-1232": business_analyst        # Computer User Support Specialists
+  "15-1299": software_engineer       # Computer Occupations, All Other
+  "13-1111": business_analyst        # Management Analysts
+  "13-1161": business_analyst        # Market Research Analysts
+  "11-3021": product_manager         # Computer and Information Systems Managers
+
+# Phrase lists per bucket. Matched longest-phrase-first so "DATA ENGINEER"
+# beats a bare "ENGINEER" and "MACHINE LEARNING ENGINEER" beats "DATA".
+keywords:
+  ml_ai_engineer:
+    - MACHINE LEARNING ENGINEER
+    - MACHINE LEARNING SCIENTIST
+    - MACHINE LEARNING
+    - DEEP LEARNING
+    - ARTIFICIAL INTELLIGENCE
+    - AI ENGINEER
+    - AI ML ENGINEER
+    - ML ENGINEER
+    - ML OPS ENGINEER
+    - MLOPS ENGINEER
+    - NLP ENGINEER
+    - COMPUTER VISION ENGINEER
+    - APPLIED SCIENTIST
+
+  data_engineer:
+    - DATA ENGINEER
+    - BIG DATA ENGINEER
+    - BIG DATA DEVELOPER
+    - ETL DEVELOPER
+    - ETL ENGINEER
+    - HADOOP DEVELOPER
+    - HADOOP ENGINEER
+    - DATA WAREHOUSE ENGINEER
+    - DATA WAREHOUSE DEVELOPER
+    - DATA WAREHOUSE ARCHITECT
+    - INFORMATICA DEVELOPER
+    - DATA PLATFORM ENGINEER
+    - DATA PIPELINE ENGINEER
+    - DATABASE DEVELOPER
+    - DATABASE ADMINISTRATOR
+    - DATA ARCHITECT
+    - SPARK DEVELOPER
+    - ANALYTICS ENGINEER
+
+  data_scientist:
+    - DATA SCIENTIST
+    - RESEARCH SCIENTIST
+    - QUANTITATIVE ANALYST
+    - QUANTITATIVE RESEARCHER
+    - STATISTICIAN
+
+  data_analyst:
+    - DATA ANALYST
+    - BUSINESS INTELLIGENCE ANALYST
+    - BUSINESS INTELLIGENCE DEVELOPER
+    - BI ANALYST
+    - BI DEVELOPER
+    - REPORTING ANALYST
+    - ANALYTICS ANALYST
+    - TABLEAU DEVELOPER
+    - POWER BI DEVELOPER
+
+  qa_engineer:
+    - QA ENGINEER
+    - QA ANALYST
+    - QUALITY ANALYST
+    - QUALITY ASSURANCE ENGINEER
+    - QUALITY ASSURANCE ANALYST
+    - QUALITY ENGINEER
+    - TEST ENGINEER
+    - TEST ANALYST
+    - SDET
+    - SOFTWARE DEVELOPMENT ENGINEER IN TEST
+    - AUTOMATION ENGINEER
+    - AUTOMATION TEST ENGINEER
+    - TEST AUTOMATION ENGINEER
+
+  devops_sre:
+    - DEVOPS ENGINEER
+    - DEVOPS
+    - SITE RELIABILITY ENGINEER
+    - SRE
+    - PLATFORM ENGINEER
+    - INFRASTRUCTURE ENGINEER
+    - CLOUD ENGINEER
+    - CLOUD ARCHITECT
+    - BUILD AND RELEASE ENGINEER
+    - RELEASE ENGINEER
+    - SYSTEMS ADMINISTRATOR
+    - SYSTEM ADMINISTRATOR
+    - NETWORK ENGINEER
+    - KUBERNETES ENGINEER
+
+  security_engineer:
+    - SECURITY ENGINEER
+    - SECURITY ANALYST
+    - INFORMATION SECURITY
+    - CYBER SECURITY
+    - CYBERSECURITY
+    - PENETRATION TESTER
+    - SECURITY ARCHITECT
+    - APPLICATION SECURITY
+
+  business_analyst:
+    - BUSINESS ANALYST
+    - BUSINESS SYSTEMS ANALYST
+    - SYSTEMS ANALYST
+    - SYSTEM ANALYST
+    - FUNCTIONAL ANALYST
+    - FUNCTIONAL CONSULTANT
+    - PROCESS ANALYST
+    - PRODUCT ANALYST
+    - TECHNICAL BUSINESS ANALYST
+
+  product_manager:
+    - PRODUCT MANAGER
+    - PRODUCT OWNER
+    - TECHNICAL PRODUCT MANAGER
+    - PROGRAM MANAGER
+    - PRODUCT MANAGEMENT
+    - SCRUM MASTER
+
+  software_engineer:
+    - SOFTWARE ENGINEER
+    - SOFTWARE DEVELOPER
+    - SOFTWARE DEVELOPMENT ENGINEER
+    - SOFTWARE ARCHITECT
+    - FULL STACK DEVELOPER
+    - FULL STACK ENGINEER
+    - FULLSTACK DEVELOPER
+    - FRONT END DEVELOPER
+    - FRONTEND DEVELOPER
+    - FRONT END ENGINEER
+    - BACK END DEVELOPER
+    - BACKEND DEVELOPER
+    - BACK END ENGINEER
+    - BACKEND ENGINEER
+    - WEB DEVELOPER
+    - MOBILE DEVELOPER
+    - IOS DEVELOPER
+    - ANDROID DEVELOPER
+    - JAVA DEVELOPER
+    - PYTHON DEVELOPER
+    - NET DEVELOPER
+    - DOT NET DEVELOPER
+    - SALESFORCE DEVELOPER
+    - SAP DEVELOPER
+    - APPLICATION DEVELOPER
+    - APPLICATIONS DEVELOPER
+    - APPLICATION ENGINEER
+    - PROGRAMMER ANALYST
+    - PROGRAMMER
+    - COMPUTER PROGRAMMER
+    - TECHNICAL LEAD
+    - MEMBER OF TECHNICAL STAFF
+
+  finance_analyst:
+    - FINANCIAL ANALYST
+    - FINANCE ANALYST
+    - FINANCIAL ANALYSIS
+    - INVESTMENT ANALYST
+    - CREDIT ANALYST
+    - RISK ANALYST
+    - ACTUARIAL ANALYST
+    - ACCOUNTANT
+    - AUDITOR
+
+  healthcare_admin:
+    - HEALTHCARE ADMINISTRATOR
+    - HEALTH SERVICES MANAGER
+    - CLINICAL RESEARCH COORDINATOR
+    - CLINICAL DATA MANAGER
+    - HEALTH INFORMATION
+    - MEDICAL RECORDS
+    - HOSPITAL ADMINISTRATOR
+    - PRACTICE ADMINISTRATOR
+
+  mechanical_engineer:
+    - MECHANICAL ENGINEER
+    - MECHANICAL DESIGN ENGINEER
+    - HVAC ENGINEER
+    - MANUFACTURING ENGINEER
+    - THERMAL ENGINEER
+
+  electrical_engineer:
+    - ELECTRICAL ENGINEER
+    - ELECTRONICS ENGINEER
+    - HARDWARE ENGINEER
+    - RF ENGINEER
+    - POWER SYSTEMS ENGINEER
+    - EMBEDDED ENGINEER
+
+  civil_engineer:
+    - CIVIL ENGINEER
+    - STRUCTURAL ENGINEER
+    - GEOTECHNICAL ENGINEER
+    - TRANSPORTATION ENGINEER
+    - CONSTRUCTION ENGINEER

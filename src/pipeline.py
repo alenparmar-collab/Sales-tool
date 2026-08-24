@@ -11,9 +11,13 @@ import pandas as pd
 
 from .discover_sources import PERFORMANCE_PAGE, get_sources
 from .download import download_sources
+from .employer_normalize import normalize_employer_name
+from .employer_top_n import write_top_employers
 from .parse_lca import parse_lca_file
 from .parse_perm import parse_perm_file
 from .report import build_report, print_report, write_report
+from .role_taxonomy import classify_dataframe
+from .unmatched_titles import write_top_unmatched_titles
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +73,18 @@ def run(
 
     combined_df = pd.concat(normalized_frames, ignore_index=True)
 
+    combined_df["employer_normalized"] = combined_df["employer_raw"].map(normalize_employer_name)
+    combined_df = classify_dataframe(combined_df)
+
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     combined_df.to_parquet(OUTPUT_PARQUET, index=False)
     combined_df.to_csv(OUTPUT_CSV, index=False)
     logger.info("Wrote %d rows to %s and %s", len(combined_df), OUTPUT_PARQUET, OUTPUT_CSV)
+
+    # Both feed the hand-curation passes described in README.md.
+    top_employers_path = write_top_employers(combined_df)
+    unmatched_path = write_top_unmatched_titles(combined_df)
+    logger.info("Wrote %s and %s", top_employers_path, unmatched_path)
 
     report = build_report(per_file_stats, combined_df)
     write_report(report)
