@@ -262,13 +262,23 @@ Actions runner (dol.gov is unreachable from the environment this was written
 in). Recorded here because several of these contradict what the build brief
 and the filenames would lead you to expect.
 
-**Quarterly files are cumulative, not incremental.** OFLC publishes a
-year-to-date file each quarter: the FY2026 Q3 file covers Oct 1 2025 –
-Jun 30 2026. Concatenating Q1–Q4 of one fiscal year would have counted
-early-year cases up to four times and inflated every employer's filing
-volume — the single number this product reports. Source selection now keeps
-only the newest release per fiscal year, and `case_number` is de-duplicated
-after the concat as a backstop.
+**Whether quarterly files are cumulative is not assumed — it is measured.**
+OFLC's release notes describe the FY2026 Q3 file as covering Oct 1 2025 –
+Jun 30 2026, which reads as cumulative year-to-date, and the pipeline
+initially kept only the newest release per fiscal year on that basis. The
+first full run disproved it for LCA: FY2024 and FY2025 came back at ~117k
+rows each against ~437k for FY2026, when real LCA volume is roughly
+600–750k a year. Summing FY2025's four quarterly files by size gives
+~615k, so the Q4 file is one quarter, not the year. PERM over the same
+window looked like full years, so the two programs may not behave alike.
+
+The pipeline therefore ingests **every** quarterly release in the window and
+de-duplicates on `case_number`, keeping the newest release of each case.
+That is correct under both readings — disjoint quarters lose nothing,
+overlapping ones collapse — and the duplicate share reported at the end of
+each run states which is actually true, as a measurement rather than a
+guess. Watch that line: a large share means cumulative, near-zero means
+incremental.
 
 **The current window contains no legacy-layout PERM file.** The brief says
 PERM is split in two because of the revised ETA-9089, and it was — but only

@@ -55,6 +55,19 @@ def print_report(report: dict) -> None:
             f"kept={row['kept_rows']:<8} dropped_unknown_status={row['dropped_unknown_status']}"
         )
 
+    dupes = report.get("duplicate_case_numbers_dropped")
+    if dupes is not None:
+        total = report["totals"]["total_rows"] + dupes
+        share = 100 * dupes / total if total else 0.0
+        verdict = (
+            "CUMULATIVE year-to-date -- overlap collapsed by de-duplication"
+            if share > 10
+            else "INCREMENTAL per quarter -- quarters are disjoint"
+        )
+        print("\n=== Overlap between quarterly releases ===")
+        print(f"  duplicate case_numbers dropped: {dupes} of {total} ({share:.2f}%)")
+        print(f"  -> OFLC releases look {verdict}")
+
     print("\n=== Row counts per fiscal year x program ===")
     for row in report["by_fiscal_year_and_program"]:
         print(

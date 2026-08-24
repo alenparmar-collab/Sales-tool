@@ -9,7 +9,6 @@ from src.discover_sources import (  # noqa: E402
     SourceFile,
     _classify,
     _extract_quarter,
-    _latest_per_fiscal_year,
     select_sources,
 )
 
@@ -43,39 +42,51 @@ def test_quarter_extraction():
     assert _extract_quarter("PERM_Record_Layout_FY2021.pdf", "") is None
 
 
-def test_only_latest_quarter_per_fiscal_year_survives():
-    kept = _latest_per_fiscal_year([f for f in REAL_LINKS if f.kind == "LCA"])
-    by_fy = {f.fiscal_year: f for f in kept}
-
-    # One file per year, not four -- the quarterly releases are cumulative.
-    assert len(kept) == 3
-    assert by_fy[2024].quarter == 4
-    assert by_fy[2025].quarter == 4
-    assert by_fy[2026].quarter == 3  # FY2026 is still in progress
-
-
-def test_unquartered_file_beats_quartered_one():
-    # A file with no quarter marker is treated as the consolidated annual
-    # release and should win over Q1..Q4 of the same year.
-    files = [
-        _f("PERM_Disclosure_Data_FY2021_Q3.xlsx", "PERM_LEGACY", 2021, 3),
-        _f("PERM_Disclosure_Data_FY2021.xlsx", "PERM_LEGACY", 2021, None),
+def test_unquartered_file_sorts_last_within_its_year():
+    # A file with no quarter marker is treated as the most recent release
+    # of the cases it holds, so it must sort after Q1..Q4 -- de-duplication
+    # keeps the last occurrence.
+    links = [
+        _f("PERM_Disclosure_Data_FY2026_Q3.xlsx", "PERM_LEGACY", 2026, 3),
+        _f("PERM_Disclosure_Data_FY2026.xlsx", "PERM_LEGACY", 2026, None),
+        _f("LCA_Disclosure_Data_FY2026_Q3.xlsx", "LCA", 2026, 3),
     ]
-    kept = _latest_per_fiscal_year(files)
-    assert len(kept) == 1
-    assert kept[0].quarter is None
+    selected = select_sources(links, lca_years=3, perm_years=2)
+    perm = [s for s in selected if s.kind == "PERM_LEGACY"]
+    assert [s.quarter for s in perm] == [3, None]
 
 
-def test_select_sources_against_real_listing():
+def test_select_sources_keeps_every_quarter():
+    # Every quarterly release in the window is ingested; correctness comes
+    # from de-duplicating case_number afterwards rather than from a guess
+    # about whether the releases are cumulative. The first full run showed
+    # keeping only Q4 lost ~80% of FY2024 and FY2025 LCA rows.
     selected = select_sources(REAL_LINKS, lca_years=3, perm_years=2)
     data = [s for s in selected if s.kind != "LAYOUT"]
 
-    # Was 12 files before the fix (and would have multi-counted); now 6:
-    # 3 LCA + 2 PERM legacy + 1 PERM revised.
-    assert len(data) == 6
-    assert sum(1 for s in data if s.kind == "LCA") == 3
-    assert sum(1 for s in data if s.kind == "PERM_LEGACY") == 2
-    assert sum(1 for s in data if s.kind == "PERM_REVISED") == 1
+    assert sum(1 for s in data if s.kind == "LCA") == 9  # 4 + 4 + 1
+    lca_2025 = sorted(s.quarter for s in data if s.kind == "LCA" and s.fiscal_year == 2025)
+    assert lca_2025 == [1, 2, 3, 4]
+
+
+def test_perm_year_window_spans_both_kinds():
+    # FY2024's revised-form file is outside a two-year PERM window and has
+    # no legacy counterpart in the listing; including it produced a
+    # spuriously small FY2024 PERM total in the run report.
+    selected = select_sources(REAL_LINKS, lca_years=3, perm_years=2)
+    perm = [s for s in selected if s.kind in ("PERM_LEGACY", "PERM_REVISED")]
+
+    assert {s.fiscal_year for s in perm} == {2025, 2026}
+    assert all(s.fiscal_year != 2024 for s in perm)
+
+
+def test_selected_files_ordered_oldest_quarter_first():
+    # De-duplication keeps the last occurrence, so ordering decides which
+    # release of a re-issued case survives.
+    selected = select_sources(REAL_LINKS, lca_years=3, perm_years=2)
+    lca = [s for s in selected if s.kind == "LCA"]
+    keys = [(s.fiscal_year, s.quarter or 99) for s in lca]
+    assert keys == sorted(keys)
 
 
 def test_layout_classifier_excludes_other_programs():

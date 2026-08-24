@@ -84,43 +84,15 @@ def _extract_fiscal_year(url: str, link_text: str) -> Optional[int]:
 def _extract_quarter(url: str, link_text: str) -> Optional[int]:
     """Quarter number from a filename like ..._FY2025_Q3.xlsx.
 
-    Returns None when a file carries no quarter marker; such a file is
-    treated as the final/whole-year release (see _latest_per_fiscal_year).
+    Returns None when a file carries no quarter marker. Such a file sorts
+    last within its fiscal year, so de-duplication treats it as the most
+    recent release of the cases it contains.
     """
     for haystack in (link_text, url):
         m = QUARTER_PATTERN.search(haystack)
         if m:
             return int(m.group(1))
     return None
-
-
-def _latest_per_fiscal_year(files: List[SourceFile]) -> List[SourceFile]:
-    """Keep only the newest quarterly release per (kind, fiscal year).
-
-    OFLC's quarterly disclosure files are cumulative year-to-date, not
-    per-quarter increments: the FY2026 Q3 file covers Oct 1 2025 through
-    Jun 30 2026, i.e. Q1+Q2+Q3. Downloading Q1..Q4 of one fiscal year and
-    concatenating them would therefore count early-year cases several
-    times over and silently inflate every employer's filing volume --
-    which is the whole number this product reports.
-
-    A file with no quarter marker sorts highest, on the assumption it is
-    the consolidated annual release.
-
-    This assumption is worth re-checking against the per-file row counts in
-    the run report: if the kept file's row count is roughly a single
-    quarter rather than a full year, the files are incremental after all
-    and this needs revisiting. The case_number de-duplication in the
-    pipeline is the backstop either way.
-    """
-    best: dict = {}
-    for f in files:
-        key = (f.kind, f.fiscal_year)
-        rank = f.quarter if f.quarter is not None else 99
-        current = best.get(key)
-        if current is None or rank > (current.quarter if current.quarter is not None else 99):
-            best[key] = f
-    return list(best.values())
 
 
 def fetch_page_links(page_url: str = PERFORMANCE_PAGE) -> List[SourceFile]:
@@ -182,21 +154,49 @@ def select_sources(
         return set(years[:n])
 
     lca_keep_years = top_fiscal_years("LCA", lca_years)
-    perm_legacy_years = top_fiscal_years("PERM_LEGACY", perm_years)
-    perm_revised_years = top_fiscal_years("PERM_REVISED", perm_years)
 
+    # PERM's two file kinds are two halves of one program, so the year
+    # window is computed across both together. Computing it per kind pulled
+    # in an orphan FY2024 revised-form file -- the only year that kind
+    # existed -- with no legacy counterpart alongside it, which showed up in
+    # the run report as a spuriously small FY2024 PERM total.
+    perm_years_pool = sorted(
+        {
+            f.fiscal_year
+            for f in all_links
+            if f.kind in ("PERM_LEGACY", "PERM_REVISED") and f.fiscal_year is not None
+        },
+        reverse=True,
+    )
+    perm_keep_years = set(perm_years_pool[:perm_years])
+
+    # EVERY quarterly release in the window is taken, not just the newest.
+    #
+    # An earlier version kept only the latest quarter per fiscal year, on
+    # the basis that OFLC's releases are cumulative year-to-date. The first
+    # full run disproved that for LCA: FY2024 and FY2025 came back at ~117k
+    # rows each against ~437k for FY2026, when real LCA volume is roughly
+    # 600-750k a year. The Q4 file is evidently one quarter, not the year.
+    # PERM's totals over the same window looked like full years, so the two
+    # programs may not even behave alike.
+    #
+    # Rather than guess a third time, the pipeline now ingests every quarter
+    # and de-duplicates on case_number, keeping the newest release of each
+    # case. That is correct under BOTH readings: if the files are
+    # incremental the quarters are disjoint and nothing is dropped; if they
+    # are cumulative the overlap collapses. The duplicate count in the run
+    # report then says which is true, as a measurement rather than an
+    # assumption.
     data_files = [f for f in all_links if f.kind == "LCA" and f.fiscal_year in lca_keep_years]
     data_files += [
-        f for f in all_links if f.kind == "PERM_LEGACY" and f.fiscal_year in perm_legacy_years
-    ]
-    data_files += [
-        f for f in all_links if f.kind == "PERM_REVISED" and f.fiscal_year in perm_revised_years
+        f
+        for f in all_links
+        if f.kind in ("PERM_LEGACY", "PERM_REVISED") and f.fiscal_year in perm_keep_years
     ]
 
-    # One file per (kind, fiscal year) -- the quarterly releases are
-    # cumulative, so keeping all four would multi-count. See
-    # _latest_per_fiscal_year.
-    selected = _latest_per_fiscal_year(data_files)
+    selected = sorted(
+        data_files, key=lambda f: (f.kind, f.fiscal_year or 0, f.quarter if f.quarter else 99)
+    )
     selected += layouts
 
     if not any(f.kind == "LCA" for f in selected):
@@ -219,6 +219,7 @@ def load_manual_overrides(path: Path = OVERRIDE_PATH) -> List[SourceFile]:
             kind=e["kind"],
             fiscal_year=e.get("fiscal_year"),
             link_text=e.get("link_text", "manual override"),
+            quarter=e.get("quarter"),
         )
         for e in entries
     ]

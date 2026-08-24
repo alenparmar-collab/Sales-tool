@@ -44,11 +44,16 @@ def run(
     per_file_stats: List[dict] = []
     normalized_frames: List[pd.DataFrame] = []
 
-    for entry in manifest:
-        kind = entry["kind"]
-        if kind == "LAYOUT":
-            continue
+    # Oldest release first, so that when the same case appears in more than
+    # one quarterly file the de-duplication below keeps the newest version
+    # of it (a case can be re-issued with a different final status).
+    data_entries = sorted(
+        (e for e in manifest if e["kind"] != "LAYOUT"),
+        key=lambda e: (e.get("fiscal_year") or 0, e.get("quarter") or 99),
+    )
 
+    for entry in data_entries:
+        kind = entry["kind"]
         local_path = Path(entry["local_path"])
         if kind == "LCA":
             normalized_df, dropped = parse_lca_file(local_path)
@@ -61,6 +66,7 @@ def run(
                 "source_file": local_path.name,
                 "kind": kind,
                 "fiscal_year": entry.get("fiscal_year"),
+                "quarter": entry.get("quarter"),
                 "raw_rows": raw_rows,
                 "kept_rows": len(normalized_df),
                 "dropped_unknown_status": dropped,
@@ -73,26 +79,31 @@ def run(
 
     combined_df = pd.concat(normalized_frames, ignore_index=True)
 
-    # Backstop against overlapping releases. Source selection already keeps
-    # only one file per fiscal year because the quarterly releases are
-    # cumulative, but a case counted twice would inflate exactly the number
-    # this product reports, so it is checked rather than assumed. A large
-    # count here means the cumulative assumption in
-    # discover_sources._latest_per_fiscal_year needs re-examining.
+    # This is what makes ingesting every quarter safe, and it is also the
+    # measurement that settles whether OFLC's quarterly releases are
+    # cumulative or incremental (see discover_sources.select_sources).
+    #
+    #   near-zero duplicates -> the quarters are disjoint increments
+    #   large duplicate share -> the releases are cumulative year-to-date
+    #
+    # Either way the result is right: keep="last" retains the newest release
+    # of each case, since frames were concatenated oldest-first.
     rows_before = len(combined_df)
     has_case = combined_df["case_number"].notna() & (combined_df["case_number"] != "")
-    dupe_mask = combined_df.loc[has_case].duplicated(subset=["case_number"], keep="first")
+    dupe_mask = combined_df.loc[has_case].duplicated(subset=["case_number"], keep="last")
     duplicate_rows = int(dupe_mask.sum())
     if duplicate_rows:
         combined_df = combined_df.drop(
             index=combined_df.loc[has_case].index[dupe_mask]
         ).reset_index(drop=True)
-        logger.warning(
-            "Dropped %d duplicate case_number rows (%.2f%% of %d).",
-            duplicate_rows,
-            100 * duplicate_rows / rows_before,
-            rows_before,
-        )
+    logger.info(
+        "Duplicate case_numbers across releases: %d of %d rows (%.2f%%) -- %s",
+        duplicate_rows,
+        rows_before,
+        100 * duplicate_rows / rows_before if rows_before else 0.0,
+        "releases look CUMULATIVE" if duplicate_rows > rows_before * 0.1
+        else "releases look INCREMENTAL",
+    )
 
     combined_df["employer_normalized"] = combined_df["employer_raw"].map(normalize_employer_name)
     combined_df = classify_dataframe(combined_df)
