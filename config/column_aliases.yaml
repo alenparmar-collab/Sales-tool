@@ -1,26 +1,23 @@
 # Canonical field -> list of known source-file header aliases, per file kind.
 #
-# WHY THIS FILE EXISTS: DOL renames columns between fiscal years (e.g. FLAG-era
-# LCA files vs pre-2020 iCERT files, and now the legacy vs revised ETA-9089
-# PERM layout). Rather than hardcoding one set of column names in Python, the
-# pipeline resolves each canonical field against whatever headers actually
-# show up in a downloaded file, tried in order, matched after normalizing
-# (uppercase, strip everything but letters/digits). If NONE of the aliases
-# for a *required* field match, the pipeline stops and prints the file's
-# real headers plus the closest fuzzy matches -- add the missing name here
-# and rerun. It never silently guesses a column.
+# WHY THIS FILE EXISTS: DOL renames columns between fiscal years and between
+# form revisions. Rather than hardcoding one set of column names in Python,
+# the pipeline resolves each canonical field against whatever headers
+# actually show up in a downloaded file, tried in order, matched after
+# normalizing (uppercase, strip everything but letters/digits). If NONE of
+# the aliases for a *required* field match, the pipeline stops and prints
+# the file's real headers plus the closest fuzzy matches. It never silently
+# guesses a column.
 #
-# PERM_LEGACY = old ETA-9089 form layout.
-# PERM_REVISED = revised ETA-9089 form layout (rolled out 2025).
-#
-# VERIFY-ON-FIRST-RUN: the LCA and PERM_LEGACY alias lists below are based on
-# the FLAG-era record layout that has been stable since FY2020. The
-# PERM_REVISED list is a best-effort guess (this pipeline was built in a
-# sandbox with no network access to dol.gov, so the actual
-# PERM_Record_Layout_*_Revised.pdf could not be read). Check it against the
-# downloaded layout PDF in data/raw/layouts/ the first time a PERM_REVISED
-# file is processed, and fix any misses here.
+# VERIFIED 2026-08-24 against the real files, via `run_pipeline.py
+# --report-headers` on a GitHub Actions runner (dol.gov is unreachable from
+# the environment this was written in). Everything below is transcribed
+# from actual header rows, not inferred from record-layout PDFs or guessed.
 
+# ---------------------------------------------------------------------------
+# LCA -- 98 columns, identical across FY2024 Q4, FY2025 Q4 and FY2026 Q3.
+# Every alias here was confirmed present in all three files.
+# ---------------------------------------------------------------------------
 LCA:
   case_number: [CASE_NUMBER, CASE_NO]
   case_status: [CASE_STATUS]
@@ -37,33 +34,54 @@ LCA:
   wage_level: [PW_WAGE_LEVEL]
   full_time_flag: [FULL_TIME_POSITION, FULL_TIME_POSITION_Y_N]
 
-PERM_LEGACY:
+# ---------------------------------------------------------------------------
+# PERM -- both file variants in the current window use the REVISED ETA-9089
+# layout, so both kinds share one alias set (via the YAML anchor below).
+#
+# What the header run actually showed:
+#
+#   PERM_Disclosure_Data_FY2025_Q4.xlsx        137 cols
+#   PERM_Disclosure_Data_FY2026_Q3.xlsx        137 cols
+#   PERM_Disclosure_Data_New_Form_FY2024_Q4    135 cols
+#
+# All three carry EMP_BUSINESS_NAME / JOB_OPP_WAGE_* / PRIMARY_WORKSITE_*,
+# which are revised-form names. The files WITHOUT "New_Form" in the filename
+# are not the legacy layout -- OFLC evidently folded everything onto the
+# revised form after FY2024 and dropped the suffix, so the filename is not a
+# reliable signal of layout. The two kinds are kept as separate labels only
+# to describe which file DOL published; functionally they now resolve
+# identically, which is why the anchor is safe.
+#
+# Legacy ETA-9089 names (WAGE_OFFER_*_9089, JOB_INFO_*) are retained as
+# lower-priority fallbacks so that pulling an older fiscal year still works.
+#
+# TWO REAL GAPS, both deliberate rather than unresolved bugs:
+#
+#   wage_level -- the revised ETA-9089 has NO prevailing-wage-level column
+#     at all. Signal 4 (level distribution) is therefore LCA-only. Left in
+#     the config with legacy names so older files still populate it; for
+#     current PERM data it will simply be null.
+#
+#   soc_code -- present as PWD_SOC_CODE in the FY2025/FY2026 files, but the
+#     FY2024 New_Form file has no SOC column whatsoever. Role classification
+#     falls back to job-title keywords for those rows, which the taxonomy
+#     already does by design.
+#
+# Both fields are optional in columns.REQUIRED_FIELDS, so neither aborts a run.
+# ---------------------------------------------------------------------------
+PERM_LEGACY: &perm_aliases
   case_number: [CASE_NUMBER, CASE_NO]
   case_status: [CASE_STATUS]
   decision_date: [DECISION_DATE]
-  employer_raw: [EMPLOYER_NAME]
-  job_title_raw: [JOB_INFO_JOB_TITLE, JOB_TITLE]
-  soc_code: [PW_SOC_CODE, SOC_CODE]
-  worksite_city: [JOB_INFO_WORK_CITY, WORKSITE_CITY]
-  worksite_state: [JOB_INFO_WORK_STATE, WORKSITE_STATE]
-  wage_from: [WAGE_OFFER_FROM_9089, WAGE_OFFERED_FROM_9089]
-  wage_to: [WAGE_OFFER_TO_9089, WAGE_OFFERED_TO_9089]
-  wage_unit: [WAGE_OFFER_UNIT_OF_PAY_9089, WAGE_OFFERED_UNIT_OF_PAY_9089]
-  wage_level: [PW_LEVEL_9089]
-  full_time_flag: [FULL_TIME_POSITION_9089, FT_POSITION_9089]
-
-# UNVERIFIED -- confirm against data/raw/layouts/PERM_Record_Layout_*_Revised.pdf
-PERM_REVISED:
-  case_number: [CASE_NUMBER, CASE_NO]
-  case_status: [CASE_STATUS]
-  decision_date: [DECISION_DATE]
-  employer_raw: [EMPLOYER_NAME, EMPLOYER_BUSINESS_NAME]
+  employer_raw: [EMP_BUSINESS_NAME, EMPLOYER_NAME]
   job_title_raw: [JOB_TITLE, JOB_INFO_JOB_TITLE]
-  soc_code: [SOC_CODE, PW_SOC_CODE]
-  worksite_city: [WORKSITE_CITY, JOB_INFO_WORK_CITY]
-  worksite_state: [WORKSITE_STATE, JOB_INFO_WORK_STATE]
-  wage_from: [WAGE_OFFERED_FROM, WAGE_OFFER_FROM_9089, WAGE_RATE_OF_PAY_FROM]
-  wage_to: [WAGE_OFFERED_TO, WAGE_OFFER_TO_9089, WAGE_RATE_OF_PAY_TO]
-  wage_unit: [WAGE_OFFERED_UNIT_OF_PAY, WAGE_OFFER_UNIT_OF_PAY_9089, WAGE_UNIT_OF_PAY]
-  wage_level: [PW_WAGE_LEVEL, PW_LEVEL_9089]
-  full_time_flag: [FULL_TIME_POSITION, FULL_TIME_POSITION_9089]
+  soc_code: [PWD_SOC_CODE, PW_SOC_CODE, SOC_CODE]
+  worksite_city: [PRIMARY_WORKSITE_CITY, JOB_INFO_WORK_CITY, WORKSITE_CITY]
+  worksite_state: [PRIMARY_WORKSITE_STATE, JOB_INFO_WORK_STATE, WORKSITE_STATE]
+  wage_from: [JOB_OPP_WAGE_FROM, WAGE_OFFER_FROM_9089, WAGE_OFFERED_FROM_9089]
+  wage_to: [JOB_OPP_WAGE_TO, WAGE_OFFER_TO_9089, WAGE_OFFERED_TO_9089]
+  wage_unit: [JOB_OPP_WAGE_PER, WAGE_OFFER_UNIT_OF_PAY_9089, WAGE_OFFERED_UNIT_OF_PAY_9089]
+  wage_level: [PW_LEVEL_9089]
+  full_time_flag: [OTHER_REQ_IS_FULLTIME_EMP, FULL_TIME_POSITION_9089, FT_POSITION_9089]
+
+PERM_REVISED: *perm_aliases

@@ -255,6 +255,45 @@ reviewing that list once and hand-adding the top entries to
 algorithm. Each run also writes `top_500_employers.csv` for the employer
 alias pass described above.
 
+## What the real data turned out to be
+
+Verified 2026-08-24 via `--discover-only` and `--report-headers` on a GitHub
+Actions runner (dol.gov is unreachable from the environment this was written
+in). Recorded here because several of these contradict what the build brief
+and the filenames would lead you to expect.
+
+**Quarterly files are cumulative, not incremental.** OFLC publishes a
+year-to-date file each quarter: the FY2026 Q3 file covers Oct 1 2025 –
+Jun 30 2026. Concatenating Q1–Q4 of one fiscal year would have counted
+early-year cases up to four times and inflated every employer's filing
+volume — the single number this product reports. Source selection now keeps
+only the newest release per fiscal year, and `case_number` is de-duplicated
+after the concat as a backstop.
+
+**The current window contains no legacy-layout PERM file.** The brief says
+PERM is split in two because of the revised ETA-9089, and it was — but only
+through FY2024. `PERM_Disclosure_Data_New_Form_FY2024_Q4.xlsx` is the
+revised form for FY2024; by FY2025 OFLC folded everything onto the revised
+form and dropped the `New_Form` suffix. `PERM_Disclosure_Data_FY2025_Q4` and
+`..._FY2026_Q3` therefore carry revised-form columns despite filenames
+suggesting otherwise. **The filename is not a reliable signal of layout**,
+so both file kinds share one alias set.
+
+**The revised ETA-9089 has no prevailing-wage-level column.** Signal 4
+(level distribution) is LCA-only. For PERM rows `wage_level` is null — a
+real gap in the source data, not a parsing failure, and worth stating as
+such wherever the UI shows level.
+
+**The FY2024 New_Form PERM file has no SOC code column at all.** Role
+classification falls back to job-title keywords for those rows, which the
+taxonomy already does by design.
+
+**LCA needed no changes.** 98 columns, identical across FY2024 Q4, FY2025 Q4
+and FY2026 Q3; every alias resolved first try.
+
+**Volume and capacity.** 1.18 GB across the six selected files, against a
+runner with 15 GB RAM, 145 GB disk, 4 CPUs. Memory was never the constraint.
+
 ## Known limitations / next steps
 
 - The five signals are a follow-on pass (Session 4 in the build brief),
