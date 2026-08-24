@@ -1,0 +1,100 @@
+name: Run DOL pipeline
+
+# Manual only. GitHub's runners have the open internet access this project
+# needs to reach dol.gov, which is what makes this the easy path -- one
+# button here instead of a local Python setup and a multi-GB download.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "discover = list files and sizes only (fast, safe). full = download and process everything."
+        required: true
+        default: discover
+        type: choice
+        options: [discover, full]
+      lca_years:
+        description: "How many fiscal years of LCA data"
+        required: false
+        default: "3"
+      perm_years:
+        description: "How many fiscal years of PERM data"
+        required: false
+        default: "2"
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    # The full run downloads and parses multi-hundred-MB Excel files; the
+    # default 6h ceiling is plenty but an accidental hang shouldn't burn it.
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Report runner resources
+        run: |
+          echo "--- disk ---";  df -h /
+          echo "--- memory ---"; free -h
+          echo "--- cpu ---";   nproc
+
+      - name: Discover source files
+        if: inputs.mode == 'discover'
+        run: python run_pipeline.py --discover-only --lca-years "${{ inputs.lca_years }}" --perm-years "${{ inputs.perm_years }}"
+
+      - name: Run full pipeline
+        if: inputs.mode == 'full'
+        run: python run_pipeline.py -v --lca-years "${{ inputs.lca_years }}" --perm-years "${{ inputs.perm_years }}"
+
+      - name: Report resources after run
+        if: always() && inputs.mode == 'full'
+        run: |
+          echo "--- disk after ---"; df -h /
+          echo "--- outputs ---";    ls -lh data/processed/ 2>/dev/null || echo "no processed output"
+
+      # The curation CSVs and the run report are what the next steps
+      # actually need, and they're small. Uploaded even on failure, since a
+      # partial run still tells us something.
+      - name: Upload curation files and report
+        if: always() && inputs.mode == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: curation-and-report
+          path: |
+            data/processed/run_report_latest.json
+            data/processed/top_500_employers.csv
+            data/processed/unmatched_titles_top_100.csv
+            data/raw/download_manifest.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      # The normalized table itself -- large, kept separately so the small
+      # files above stay quick to download.
+      - name: Upload normalized dataset
+        if: success() && inputs.mode == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dol-filings-parquet
+          path: data/processed/dol_filings.parquet
+          if-no-files-found: warn
+          retention-days: 30
+
+      # Record layouts, so the PERM_REVISED column names can finally be
+      # checked against the real document rather than guessed at.
+      - name: Upload record layout PDFs
+        if: always() && inputs.mode == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: record-layouts
+          path: data/raw/layouts/*.pdf
+          if-no-files-found: warn
+          retention-days: 30
