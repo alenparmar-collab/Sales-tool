@@ -262,7 +262,28 @@ Actions runner (dol.gov is unreachable from the environment this was written
 in). Recorded here because several of these contradict what the build brief
 and the filenames would lead you to expect.
 
-**Whether quarterly files are cumulative is not assumed — it is measured.**
+**SETTLED: the quarterly releases are incremental.** The run of
+2026-08-24 measured 25,072 duplicate case numbers across 1,781,331 rows —
+1.41%. The quarters are disjoint, so all four of a fiscal year must be
+ingested. With that fixed, LCA lands at 546,490 (FY2024), 586,143 (FY2025)
+and 437,496 (FY2026, nine months), which matches published OFLC volume.
+The small residual overlap is cases re-issued across a quarter boundary;
+de-duplication keeps the newest determination. DOL's "October 1 through
+June 30" phrasing describes the coverage of a release *set*, not of each
+individual file.
+
+**PERM uses a status LCA does not, and assuming otherwise cost 39% of it.**
+The same run dropped 57,073 of 147,056 FY2025 PERM rows and 16,287 FY2026
+rows as "unknown status" while LCA dropped none. The cause is
+`CERTIFIED-EXPIRED`: a PERM labor certification DOL approved but the
+employer never used within the 180-day window. It now counts toward the
+main total — DOL granted it, so the sponsorship happened — and the exact
+value stays in `case_status` so it can be separated downstream. Any status
+still unrecognized is now **named with its row count** in the run report
+rather than vanishing into a single "dropped" number, which is what hid
+this.
+
+**How the cumulative question was settled (kept for method).**
 OFLC's release notes describe the FY2026 Q3 file as covering Oct 1 2025 –
 Jun 30 2026, which reads as cumulative year-to-date, and the pipeline
 initially kept only the newest release per fiscal year on that basis. The

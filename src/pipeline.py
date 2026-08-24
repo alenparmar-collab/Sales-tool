@@ -56,9 +56,18 @@ def run(
         kind = entry["kind"]
         local_path = Path(entry["local_path"])
         if kind == "LCA":
-            normalized_df, dropped = parse_lca_file(local_path)
+            normalized_df, dropped, unknown_statuses = parse_lca_file(local_path)
         else:
-            normalized_df, dropped = parse_perm_file(local_path, file_kind=kind)
+            normalized_df, dropped, unknown_statuses = parse_perm_file(
+                local_path, file_kind=kind
+            )
+        if unknown_statuses:
+            logger.warning(
+                "%s: dropped %d rows with unrecognized case_status: %s",
+                local_path.name,
+                dropped,
+                unknown_statuses,
+            )
 
         raw_rows = len(normalized_df) + dropped
         per_file_stats.append(
@@ -70,6 +79,7 @@ def run(
                 "raw_rows": raw_rows,
                 "kept_rows": len(normalized_df),
                 "dropped_unknown_status": dropped,
+                "unknown_statuses": unknown_statuses,
             }
         )
         normalized_frames.append(normalized_df)

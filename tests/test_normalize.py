@@ -67,9 +67,13 @@ def test_normalize_lca_end_to_end():
         ]
     )
 
-    out, dropped = normalize_file(raw, file_kind="LCA", program="LCA", source_label="fake_lca.xlsx")
+    out, dropped, unknown = normalize_file(
+        raw, file_kind="LCA", program="LCA", source_label="fake_lca.xlsx"
+    )
 
     assert dropped == 1
+    # The dropped value is named, not just counted.
+    assert unknown == {"PENDING": 1}
     assert len(out) == 3
 
     row0 = out.iloc[0]

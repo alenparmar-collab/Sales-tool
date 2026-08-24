@@ -62,8 +62,8 @@ def _normalize_full_time(series: pd.Series) -> pd.Series:
 
 def normalize_file(
     raw_df: pd.DataFrame, file_kind: str, program: str, source_label: str
-) -> Tuple[pd.DataFrame, int]:
-    """Returns (normalized_df, rows_dropped_for_unknown_status)."""
+) -> Tuple[pd.DataFrame, int, dict]:
+    """Returns (normalized_df, rows_dropped, {unknown_status: count})."""
     headers = list(raw_df.columns)
     resolved = resolve_columns(headers, file_kind, source_label)
 
@@ -95,10 +95,16 @@ def normalize_file(
     out["source_file"] = source_label
 
     # Disclosure files should only contain final determinations (CERTIFIED,
-    # CERTIFIED-WITHDRAWN, DENIED, WITHDRAWN). Anything else is dropped
-    # rather than silently kept with an unclassified status.
+    # Anything not in status.KNOWN_STATUSES is dropped rather than kept with
+    # an unclassified status -- but the distinct values and their counts are
+    # returned so the run report can name them. Reporting only the total
+    # dropped is what let 39% of PERM go missing behind a single number.
     known_mask = normalized_status.map(is_known_status).fillna(False)
+    unknown_counts = {
+        str(k): int(v)
+        for k, v in normalized_status.loc[~known_mask].value_counts().items()
+    }
     rows_dropped = int((~known_mask).sum())
     out = out.loc[known_mask].reset_index(drop=True)
 
-    return out[TARGET_COLUMNS], rows_dropped
+    return out[TARGET_COLUMNS], rows_dropped, unknown_counts

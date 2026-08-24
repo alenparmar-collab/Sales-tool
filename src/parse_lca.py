@@ -14,5 +14,6 @@ def read_lca_file(path: Path) -> pd.DataFrame:
 
 
 def parse_lca_file(path: Path):
+    """Returns (normalized_df, rows_dropped, {unknown_status: count})."""
     raw_df = read_lca_file(path)
     return normalize_file(raw_df, file_kind="LCA", program="LCA", source_label=path.name)

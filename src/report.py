@@ -55,6 +55,18 @@ def print_report(report: dict) -> None:
             f"kept={row['kept_rows']:<8} dropped_unknown_status={row['dropped_unknown_status']}"
         )
 
+    # Named, not just counted. A bare drop total hid CERTIFIED-EXPIRED and
+    # took 39% of FY2025 PERM with it.
+    unknown_totals: dict = {}
+    for row in report["per_file"]:
+        for status, count in (row.get("unknown_statuses") or {}).items():
+            unknown_totals[status] = unknown_totals.get(status, 0) + count
+    if unknown_totals:
+        print("\n=== Unrecognized case_status values (rows dropped) ===")
+        for status, count in sorted(unknown_totals.items(), key=lambda kv: -kv[1]):
+            print(f"  {status:<40} {count}")
+        print("  Add any legitimate determination above to src/status.py.")
+
     dupes = report.get("duplicate_case_numbers_dropped")
     if dupes is not None:
         total = report["totals"]["total_rows"] + dupes
