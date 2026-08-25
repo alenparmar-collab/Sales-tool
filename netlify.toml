@@ -9,6 +9,15 @@
   publish = "web"
   command = ""
 
+# The page carries en-dashes and middots. Without an explicit charset the
+# browser guesses, and a Latin-1 guess renders them as mojibake -- which is
+# exactly what a local server with no charset header produced during
+# testing. Declared rather than left to the host's default.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Content-Type = "text/html; charset=UTF-8"
+
 [[headers]]
   for = "/*"
   [headers.values]

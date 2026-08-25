@@ -382,7 +382,7 @@
   }
 </style>
 
-<div class="demo-banner">
+<div class="demo-banner" id="demo-banner">
   <div class="demo-banner-inner">
     <span class="demo-tag">Demo data</span>
     <p><strong>Every number on this page is invented.</strong> This is an interface preview built before the pipeline had access to real DOL filings — the figures are synthetic and describe no real employer. Wired to live OFLC data, the layout stays; the numbers change. The email field is inert here and stores nothing.</p>
@@ -391,7 +391,7 @@
 
 <div class="shell">
   <header class="masthead">
-    <p class="eyebrow">DOL OFLC disclosure data · FY2024–FY2026</p>
+    <p class="eyebrow" id="data-window">DOL OFLC disclosure data</p>
     <h1>Did your applications go to companies that actually sponsor?</h1>
     <p class="standfirst">Paste the companies you applied to. This checks what each one actually filed with the Department of Labor — for your role specifically, not just overall.</p>
   </header>
@@ -469,6 +469,7 @@ Brightpath Labs</textarea>
 
   <footer>
     <p class="footnote-label">About this data</p>
+    <p id="coverage-note" style="display:none"></p>
     <p>An LCA is a <em>filing</em>, not proof of a hire. Certification does not mean a person was employed, or that a job was ever posted.</p>
     <p>Source: U.S. Department of Labor, Office of Foreign Labor Certification case disclosure data, fiscal years 2024–2026. <a href="https://www.dol.gov/agencies/eta/foreign-labor/performance" target="_blank" rel="noopener">dol.gov/agencies/eta/foreign-labor/performance</a></p>
     <p>DOL publishes quarterly, so recent filings may not appear yet. This tool reports what employers filed. It does not predict whether anyone will be hired.</p>
@@ -479,8 +480,8 @@ Brightpath Labs</textarea>
 (function () {
   "use strict";
 
-  var YEARS = [2024, 2025, 2026];
   var MAX_COMPANIES = 40;
+  var INDEX_URL = "data/index.json";
 
   // Results are ordered worst-news-first: the point of the tool is the
   // dead ends, and they shouldn't sit below the companies that do file.
@@ -509,77 +510,20 @@ Brightpath Labs</textarea>
     ["electrical_engineer", "Electrical Engineer"],
     ["civil_engineer", "Civil Engineer"]
   ];
+  var BUCKET_LABEL = {};
+  BUCKETS.forEach(function (b) { BUCKET_LABEL[b[0]] = b[1]; });
 
-  var METROS = [
-    ["austin", "Austin, TX", 1.00],
-    ["dallas", "Dallas, TX", 0.95],
-    ["sanfrancisco", "San Francisco, CA", 1.26],
-    ["sanjose", "San Jose, CA", 1.28],
-    ["seattle", "Seattle, WA", 1.15],
-    ["newyork", "New York, NY", 1.18],
-    ["boston", "Boston, MA", 1.10],
-    ["chicago", "Chicago, IL", 1.00],
-    ["atlanta", "Atlanta, GA", 0.93]
+  // Staffing and consulting firms file to place consultants at client
+  // sites, so their volume says much less about your odds than a direct
+  // employer's does. Flagged rather than scored. Matched on a normalized
+  // name prefix.
+  var STAFFING_PREFIXES = [
+    "TATA CONSULTANCY", "INFOSYS", "COGNIZANT", "DELOITTE", "WIPRO",
+    "HCL", "CAPGEMINI", "ACCENTURE", "TECH MAHINDRA", "LTIMINDTREE",
+    "MINDTREE", "LARSEN TOUBRO", "GENPACT", "MPHASIS", "VIRTUSA",
+    "RANDSTAD", "MANPOWER", "SYNTEL", "UST", "ZENSAR", "HEXAWARE",
+    "BIRLASOFT", "IGATE", "COLLABERA", "APEX", "INSIGHT GLOBAL"
   ];
-
-  // Base annual wage per bucket, before metro adjustment. Invented,
-  // chosen to be plausible rather than derived from anything.
-  var BASE_WAGE = {
-    software_engineer: 145000, data_engineer: 140000, data_analyst: 96000,
-    data_scientist: 152000, ml_ai_engineer: 178000, qa_engineer: 104000,
-    business_analyst: 101000, devops_sre: 146000, product_manager: 161000,
-    security_engineer: 139000, finance_analyst: 112000, healthcare_admin: 94000,
-    mechanical_engineer: 96000, electrical_engineer: 111000, civil_engineer: 89000
-  };
-
-  // Demo employer profiles. `files` lists the buckets each one files in;
-  // everything else is generated deterministically from the name so the
-  // page is stable across reloads.
-  var EMPLOYERS = [
-    { canonical: "Amazon", aliases: ["amazon", "amazon com", "amazon web", "aws"], scale: 9,
-      files: ["software_engineer","data_engineer","data_scientist","ml_ai_engineer","devops_sre","product_manager","business_analyst","security_engineer","data_analyst"],
-      perm: true },
-    { canonical: "Google", aliases: ["google", "alphabet"], scale: 8,
-      files: ["software_engineer","data_engineer","data_scientist","ml_ai_engineer","devops_sre","product_manager","security_engineer"],
-      perm: true },
-    { canonical: "Meta", aliases: ["meta", "meta platforms", "facebook"], scale: 7,
-      files: ["software_engineer","data_engineer","data_scientist","ml_ai_engineer","product_manager","security_engineer"],
-      perm: true },
-    { canonical: "Capital One", aliases: ["capital one", "capital one bank", "capital one financial"], scale: 6,
-      files: ["software_engineer","data_engineer","data_analyst","data_scientist","business_analyst","finance_analyst","devops_sre"],
-      perm: true },
-    { canonical: "JPMorgan Chase", aliases: ["jpmorgan", "jpmorgan chase", "jp morgan", "chase"], scale: 6,
-      files: ["software_engineer","data_engineer","business_analyst","finance_analyst","data_analyst","security_engineer"],
-      perm: true },
-    { canonical: "Walmart", aliases: ["walmart", "wal mart", "walmart stores"], scale: 5,
-      files: ["software_engineer","data_engineer","data_analyst","business_analyst","product_manager"],
-      perm: true },
-    // Staffing/consulting — flagged, not scored
-    { canonical: "Cognizant", aliases: ["cognizant", "cts"], scale: 9, staffing: true,
-      files: ["software_engineer","qa_engineer","business_analyst","data_engineer","data_analyst","devops_sre"],
-      perm: true },
-    { canonical: "Deloitte", aliases: ["deloitte"], scale: 8, staffing: true,
-      files: ["business_analyst","software_engineer","data_analyst","finance_analyst","product_manager"],
-      perm: true },
-    // LCA volume but no PERM — no green card path
-    { canonical: "Northgate Systems", aliases: ["northgate", "northgate systems"], scale: 4,
-      files: ["software_engineer","qa_engineer","devops_sre","business_analyst"],
-      perm: false },
-    // Stopped filing after FY2024
-    { canonical: "Riverbend Analytics", aliases: ["riverbend", "riverbend analytics"], scale: 3,
-      files: ["data_analyst","data_engineer","data_scientist"],
-      perm: false, stoppedAfter: 2024 }
-  ];
-
-  // --- tiny deterministic hash so demo numbers never shuffle on reload
-  function hash(str) {
-    var h = 2166136261;
-    for (var i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    return (h >>> 0) / 4294967295;
-  }
 
   function normalize(s) {
     return String(s || "")
@@ -591,7 +535,13 @@ Brightpath Labs</textarea>
       .trim();
   }
 
-  // token-set-ratio-ish similarity, same spirit as the Python matcher
+  function isStaffing(name) {
+    for (var i = 0; i < STAFFING_PREFIXES.length; i++) {
+      if (name.indexOf(STAFFING_PREFIXES[i]) === 0) return true;
+    }
+    return false;
+  }
+
   function similarity(a, b) {
     var at = a.split(" ").filter(Boolean), bt = b.split(" ").filter(Boolean);
     if (!at.length || !bt.length) return 0;
@@ -602,87 +552,305 @@ Brightpath Labs</textarea>
     return (2 * shared) / (at.length + bt.length) * 100;
   }
 
-  function matchEmployer(input) {
-    var norm = normalize(input);
-    if (!norm) return { matched: false, input: input, candidates: [] };
+  // ---------------------------------------------------------------------
+  // Data sources. Both expose the same shape so the rendering code below
+  // never knows which one it is reading from.
+  // ---------------------------------------------------------------------
 
-    for (var i = 0; i < EMPLOYERS.length; i++) {
-      for (var j = 0; j < EMPLOYERS[i].aliases.length; j++) {
-        if (normalize(EMPLOYERS[i].aliases[j]) === norm) {
-          return { matched: true, employer: EMPLOYERS[i], input: input, score: 100 };
-        }
-      }
-    }
-    var scored = EMPLOYERS.map(function (e) {
-      var best = 0;
-      e.aliases.forEach(function (a) { best = Math.max(best, similarity(norm, normalize(a))); });
-      return { employer: e, score: best };
-    }).sort(function (x, y) { return y.score - x.score; });
+  var DATA = null;      // the active source
+  var IS_REAL = false;
 
-    if (scored.length && scored[0].score >= 85) {
-      return { matched: true, employer: scored[0].employer, input: input, score: scored[0].score };
-    }
-    return {
-      matched: false, input: input,
-      candidates: scored.slice(0, 3).filter(function (s) { return s.score > 20; })
-    };
+  // --- real index -------------------------------------------------------
+
+  function RealIndex(idx) {
+    this.idx = idx;
+    this.years = idx.meta.fiscal_years;
+    this.employers = idx.employers;
+
+    // Group by leading token so "Amazon" can find every Amazon entity.
+    this.byFirstToken = {};
+    var self = this;
+    idx.employers.forEach(function (e) {
+      var first = e.n.split(" ")[0];
+      (self.byFirstToken[first] = self.byFirstToken[first] || []).push(e);
+    });
+    this.byName = {};
+    idx.employers.forEach(function (e) { self.byName[e.n] = e; });
   }
 
-  function signalsFor(emp, bucket, metroMult) {
-    var filesBucket = emp.files.indexOf(bucket) !== -1;
-    var byYear = {}, roleByYear = {}, total = 0, roleTotal = 0;
+  RealIndex.prototype.match = function (raw) {
+    var q = normalize(raw);
+    if (!q) return { matched: false, input: raw, candidates: [] };
 
-    YEARS.forEach(function (y, idx) {
-      var seed = hash(emp.canonical + ":" + y);
-      var stopped = emp.stoppedAfter && y > emp.stoppedAfter;
-      var n = stopped ? 0 : Math.round(emp.scale * (7 + seed * 9) * (0.75 + idx * 0.16));
-      byYear[y] = n;
-      total += n;
+    // Exact name -> that entity alone.
+    if (this.byName[q]) {
+      return { matched: true, input: raw, entities: [this.byName[q]], score: 100 };
+    }
 
-      var rSeed = hash(emp.canonical + ":" + bucket + ":" + y);
-      var rn = 0;
-      if (filesBucket && !stopped) {
-        rn = Math.max(1, Math.round(n * (0.12 + rSeed * 0.34)));
+    // Every entity whose name begins with the query's tokens. Until the
+    // hand-built alias map exists this is how "Amazon" reaches
+    // AMAZON COM, AMAZON WEB, AMAZON DATA and the rest.
+    var qTokens = q.split(" ");
+    var pool = this.byFirstToken[qTokens[0]] || [];
+    var hits = pool.filter(function (e) {
+      var eTokens = e.n.split(" ");
+      if (eTokens.length < qTokens.length) return false;
+      for (var i = 0; i < qTokens.length; i++) {
+        if (eTokens[i] !== qTokens[i]) return false;
       }
-      roleByYear[y] = rn;
-      roleTotal += rn;
+      return true;
+    });
+    if (hits.length) {
+      hits.sort(function (a, b) { return b.t - a.t; });
+      return { matched: true, input: raw, entities: hits, score: 100 };
+    }
+
+    // Nothing prefixed. Fall back to fuzzy, and refuse below threshold.
+    var scored = [];
+    for (var i = 0; i < this.employers.length; i++) {
+      var s = similarity(q, this.employers[i].n);
+      if (s > 40) scored.push({ e: this.employers[i], s: s });
+    }
+    scored.sort(function (a, b) { return b.s - a.s || b.e.t - a.e.t; });
+
+    if (scored.length && scored[0].s >= 85) {
+      return { matched: true, input: raw, entities: [scored[0].e], score: scored[0].s };
+    }
+    return {
+      matched: false,
+      input: raw,
+      candidates: scored.slice(0, 5).map(function (x) {
+        return { name: x.e.n, score: x.s };
+      })
+    };
+  };
+
+  RealIndex.prototype.signals = function (match, bucket) {
+    var years = this.years;
+    var ents = match.entities;
+    var total = 0, perm = 0, roleTotal = 0;
+    var byYear = years.map(function () { return 0; });
+    var roleByYear = years.map(function () { return 0; });
+    var levels = {}, wMin = null, wMax = null, wMed = null;
+    var staffing = false;
+
+    ents.forEach(function (e) {
+      total += e.t;
+      perm += e.p || 0;
+      if (isStaffing(e.n)) staffing = true;
+      (e.y || []).forEach(function (v, i) { byYear[i] += v; });
+
+      var b = e.b && e.b[bucket];
+      if (!b) return;
+      roleTotal += b.t;
+      (b.y || []).forEach(function (v, i) { roleByYear[i] += v; });
+      if (b.l) {
+        Object.keys(b.l).forEach(function (k) {
+          levels[k] = (levels[k] || 0) + b.l[k];
+        });
+      }
+      if (b.w) {
+        wMin = wMin === null ? b.w[0] : Math.min(wMin, b.w[0]);
+        wMax = wMax === null ? b.w[2] : Math.max(wMax, b.w[2]);
+      }
     });
 
-    var latest = YEARS[YEARS.length - 1];
-    var earlier = YEARS.slice(0, -1).some(function (y) { return byYear[y] > 0; });
-    var stoppedFiling = byYear[latest] === 0 && earlier;
+    // A median can be summed from nothing: it is only meaningful when a
+    // single entity matched. Counts and ranges combine exactly; a median
+    // across entities does not, and inventing one would misreport pay.
+    if (ents.length === 1) {
+      var only = ents[0].b && ents[0].b[bucket];
+      if (only && only.w) wMed = only.w[1];
+    }
 
-    var levels = null, wageMin = null, wageMed = null, wageMax = null;
+    var latest = byYear[byYear.length - 1];
+    var earlier = byYear.slice(0, -1).some(function (v) { return v > 0; });
+
+    return {
+      total: total,
+      roleTotal: roleTotal,
+      byYear: byYear,
+      roleByYear: roleByYear,
+      stoppedFiling: latest === 0 && earlier,
+      levels: Object.keys(levels).length ? levels : null,
+      wageMin: wMin, wageMed: wMed, wageMax: wMax,
+      hasPerm: perm > 0,
+      permCount: perm,
+      isStaffing: staffing,
+      entityCount: ents.length,
+      entityNames: ents.slice(0, 6).map(function (e) { return e.n; })
+    };
+  };
+
+  RealIndex.prototype.wageStats = function (bucket, metro) {
+    var s = this.idx.wage_stats[bucket + "|" + metro];
+    return s ? { p25: s[0], median: s[1], p75: s[2], count: s[3] } : null;
+  };
+
+  RealIndex.prototype.metros = function () { return this.idx.metros || []; };
+  RealIndex.prototype.fiscalYears = function () { return this.years; };
+
+  // --- demo fallback ----------------------------------------------------
+  // Used only when the real index has not been published yet. Every number
+  // it produces is invented, and the banner above the page says so.
+
+  var DEMO_YEARS = [2024, 2025, 2026];
+  var DEMO_BASE_WAGE = {
+    software_engineer: 145000, data_engineer: 140000, data_analyst: 96000,
+    data_scientist: 152000, ml_ai_engineer: 178000, qa_engineer: 104000,
+    business_analyst: 101000, devops_sre: 146000, product_manager: 161000,
+    security_engineer: 139000, finance_analyst: 112000, healthcare_admin: 94000,
+    mechanical_engineer: 96000, electrical_engineer: 111000, civil_engineer: 89000
+  };
+  var DEMO_METROS = [
+    "AUSTIN, TX", "DALLAS, TX", "SAN FRANCISCO, CA", "SAN JOSE, CA",
+    "SEATTLE, WA", "NEW YORK, NY", "BOSTON, MA", "CHICAGO, IL", "ATLANTA, GA"
+  ];
+  var DEMO_METRO_MULT = {
+    "AUSTIN, TX": 1.0, "DALLAS, TX": 0.95, "SAN FRANCISCO, CA": 1.26,
+    "SAN JOSE, CA": 1.28, "SEATTLE, WA": 1.15, "NEW YORK, NY": 1.18,
+    "BOSTON, MA": 1.1, "CHICAGO, IL": 1.0, "ATLANTA, GA": 0.93
+  };
+  var DEMO_EMPLOYERS = [
+    { n: "AMAZON COM", scale: 9, perm: true,
+      files: ["software_engineer","data_engineer","data_scientist","ml_ai_engineer","devops_sre","product_manager","business_analyst","security_engineer","data_analyst"] },
+    { n: "GOOGLE", scale: 8, perm: true,
+      files: ["software_engineer","data_engineer","data_scientist","ml_ai_engineer","devops_sre","product_manager","security_engineer"] },
+    { n: "META PLATFORMS", scale: 7, perm: true,
+      files: ["software_engineer","data_engineer","data_scientist","ml_ai_engineer","product_manager","security_engineer"] },
+    { n: "CAPITAL ONE", scale: 6, perm: true,
+      files: ["software_engineer","data_engineer","data_analyst","data_scientist","business_analyst","finance_analyst","devops_sre"] },
+    { n: "JPMORGAN CHASE", scale: 6, perm: true,
+      files: ["software_engineer","data_engineer","business_analyst","finance_analyst","data_analyst","security_engineer"] },
+    { n: "WALMART", scale: 5, perm: true,
+      files: ["software_engineer","data_engineer","data_analyst","business_analyst","product_manager"] },
+    { n: "COGNIZANT TECHNOLOGY", scale: 9, perm: true,
+      files: ["software_engineer","qa_engineer","business_analyst","data_engineer","data_analyst","devops_sre"] },
+    { n: "DELOITTE CONSULTING", scale: 8, perm: true,
+      files: ["business_analyst","software_engineer","data_analyst","finance_analyst","product_manager"] },
+    { n: "NORTHGATE", scale: 4, perm: false,
+      files: ["software_engineer","qa_engineer","devops_sre","business_analyst"] },
+    { n: "RIVERBEND ANALYTICS", scale: 3, perm: false, stoppedAfter: 2024,
+      files: ["data_analyst","data_engineer","data_scientist"] }
+  ];
+
+  function hash(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0) / 4294967295;
+  }
+
+  function DemoData() { this.years = DEMO_YEARS; }
+
+  DemoData.prototype.match = function (raw) {
+    var q = normalize(raw);
+    if (!q) return { matched: false, input: raw, candidates: [] };
+    var qTokens = q.split(" ");
+
+    var hits = DEMO_EMPLOYERS.filter(function (e) {
+      var t = e.n.split(" ");
+      if (t.length < qTokens.length) return false;
+      for (var i = 0; i < qTokens.length; i++) if (t[i] !== qTokens[i]) return false;
+      return true;
+    });
+    if (hits.length) return { matched: true, input: raw, entities: hits, score: 100 };
+
+    var scored = DEMO_EMPLOYERS.map(function (e) {
+      return { e: e, s: similarity(q, e.n) };
+    }).sort(function (a, b) { return b.s - a.s; });
+
+    if (scored[0] && scored[0].s >= 85) {
+      return { matched: true, input: raw, entities: [scored[0].e], score: scored[0].s };
+    }
+    return {
+      matched: false, input: raw,
+      candidates: scored.slice(0, 3).filter(function (x) { return x.s > 20; })
+        .map(function (x) { return { name: x.e.n, score: x.s }; })
+    };
+  };
+
+  DemoData.prototype.signals = function (match, bucket) {
+    var e = match.entities[0];
+    var filesBucket = e.files.indexOf(bucket) !== -1;
+    var byYear = [], roleByYear = [], total = 0, roleTotal = 0;
+
+    DEMO_YEARS.forEach(function (y, idx) {
+      var seed = hash(e.n + ":" + y);
+      var stopped = e.stoppedAfter && y > e.stoppedAfter;
+      var n = stopped ? 0 : Math.round(e.scale * (7 + seed * 9) * (0.75 + idx * 0.16));
+      byYear.push(n); total += n;
+      var rSeed = hash(e.n + ":" + bucket + ":" + y);
+      var rn = (filesBucket && !stopped) ? Math.max(1, Math.round(n * (0.12 + rSeed * 0.34))) : 0;
+      roleByYear.push(rn); roleTotal += rn;
+    });
+
+    var levels = null, wMin = null, wMed = null, wMax = null;
     if (roleTotal > 0) {
-      var base = BASE_WAGE[bucket] * metroMult;
-      var lSeed = hash(emp.canonical + ":lvl:" + bucket);
-      // Senior-weighted employers skew to III/IV
-      var seniorSkew = lSeed > 0.5;
-      levels = seniorSkew
+      var lSeed = hash(e.n + ":lvl:" + bucket);
+      var senior = lSeed > 0.5;
+      levels = senior
         ? { "I": Math.round(roleTotal * 0.06), "II": Math.round(roleTotal * 0.18),
             "III": Math.round(roleTotal * 0.42), "IV": Math.round(roleTotal * 0.34) }
         : { "I": Math.round(roleTotal * 0.28), "II": Math.round(roleTotal * 0.37),
             "III": Math.round(roleTotal * 0.24), "IV": Math.round(roleTotal * 0.11) };
       Object.keys(levels).forEach(function (k) { if (levels[k] < 1) delete levels[k]; });
-
+      var centre = DEMO_BASE_WAGE[bucket] * (senior ? 1.12 : 0.94);
       var spread = 0.22 + lSeed * 0.1;
-      var centre = base * (seniorSkew ? 1.12 : 0.94);
-      wageMin = Math.round(centre * (1 - spread) / 1000) * 1000;
-      wageMed = Math.round(centre / 1000) * 1000;
-      wageMax = Math.round(centre * (1 + spread) / 1000) * 1000;
+      wMin = Math.round(centre * (1 - spread) / 1000) * 1000;
+      wMed = Math.round(centre / 1000) * 1000;
+      wMax = Math.round(centre * (1 + spread) / 1000) * 1000;
     }
+
+    var latest = byYear[byYear.length - 1];
+    var earlier = byYear.slice(0, -1).some(function (v) { return v > 0; });
 
     return {
       total: total, roleTotal: roleTotal, byYear: byYear, roleByYear: roleByYear,
-      stoppedFiling: stoppedFiling, filesBucket: filesBucket,
-      levels: levels, wageMin: wageMin, wageMed: wageMed, wageMax: wageMax,
-      hasPerm: !!emp.perm, isStaffing: !!emp.staffing
+      stoppedFiling: latest === 0 && earlier,
+      levels: levels, wageMin: wMin, wageMed: wMed, wageMax: wMax,
+      hasPerm: !!e.perm, permCount: e.perm ? 1 : 0,
+      isStaffing: isStaffing(e.n),
+      entityCount: 1, entityNames: [e.n]
     };
-  }
+  };
+
+  DemoData.prototype.wageStats = function (bucket, metro) {
+    var base = DEMO_BASE_WAGE[bucket] * (DEMO_METRO_MULT[metro] || 1);
+    return {
+      p25: Math.round(base * 0.84 / 1000) * 1000,
+      median: Math.round(base / 1000) * 1000,
+      p75: Math.round(base * 1.19 / 1000) * 1000,
+      count: null
+    };
+  };
+
+  DemoData.prototype.metros = function () { return DEMO_METROS; };
+  DemoData.prototype.fiscalYears = function () { return DEMO_YEARS; };
+
+  // ---------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------
 
   function money(n) {
     if (n === null || n === undefined) return "—";
     return "$" + Math.round(n).toLocaleString("en-US");
+  }
+
+  function titleCase(s) {
+    return String(s).toLowerCase().replace(/\b[a-z]/g, function (c) {
+      return c.toUpperCase();
+    });
+  }
+
+  // Metros arrive as "AUSTIN, TX". Title-casing alone gives "Austin, Tx",
+  // so the state code is restored after.
+  function metroLabel(m) {
+    return titleCase(m).replace(/,\s*([A-Za-z]{2})$/, function (_, st) {
+      return ", " + st.toUpperCase();
+    });
   }
 
   function el(tag, cls, text) {
@@ -700,17 +868,22 @@ Brightpath Labs</textarea>
     return ["v-files", "Files for your role"];
   }
 
-  function renderCompany(match, bucket, bucketLabel, metroMult) {
-    var emp = match.employer;
-    var s = signalsFor(emp, bucket, metroMult);
+  function renderCompany(match, bucket, bucketLabel) {
+    var s = DATA.signals(match, bucket);
+    var years = DATA.fiscalYears();
     var card = el("article", "co");
 
     var head = el("div", "co-head");
     var left = el("div");
-    left.appendChild(el("p", "co-name", emp.canonical));
-    if (normalize(match.input) !== normalize(emp.canonical)) {
-      left.appendChild(el("span", "co-input", "you typed: " + match.input));
+    left.appendChild(el("p", "co-name", titleCase(match.entities[0].n)));
+    var sub = [];
+    if (normalize(match.input) !== normalize(match.entities[0].n)) {
+      sub.push("you typed: " + match.input);
     }
+    if (s.entityCount > 1) {
+      sub.push(s.entityCount + " related filing entities combined");
+    }
+    if (sub.length) left.appendChild(el("span", "co-input", sub.join("  ·  ")));
     head.appendChild(left);
     var v = verdictFor(s);
     head.appendChild(el("span", "verdict " + v[0], v[1]));
@@ -718,46 +891,54 @@ Brightpath Labs</textarea>
 
     var grid = el("div", "signals");
 
-    // Signal 1
     var s1 = el("div", "sig" + (s.total === 0 ? " flag-crit" : ""));
     s1.appendChild(el("span", "sig-label", "1 · Certified filings"));
     s1.appendChild(el("span", "sig-val", s.total.toLocaleString("en-US")));
-    s1.appendChild(el("span", "sig-note", "all roles, FY24–FY26"));
+    s1.appendChild(el("span", "sig-note", "all roles, FY" + String(years[0]).slice(2) +
+      "–FY" + String(years[years.length - 1]).slice(2)));
     grid.appendChild(s1);
 
-    // Signal 2
     var s2 = el("div", "sig" + (s.roleTotal === 0 ? " flag-crit" : " flag-pos"));
     s2.appendChild(el("span", "sig-label", "2 · In " + bucketLabel));
     s2.appendChild(el("span", "sig-val", s.roleTotal.toLocaleString("en-US")));
     s2.appendChild(el("span", "sig-note", s.roleTotal === 0
       ? "none in your role"
-      : Math.round(s.roleTotal / s.total * 100) + "% of their filings"));
+      : Math.max(1, Math.round(s.roleTotal / s.total * 100)) + "% of their filings"));
     grid.appendChild(s2);
 
-    // Signal 3
     var s3 = el("div", "sig" + (s.stoppedFiling ? " flag-warn" : ""));
     s3.appendChild(el("span", "sig-label", "3 · By fiscal year"));
     var yrs = el("div", "years");
-    YEARS.forEach(function (y) {
+    years.forEach(function (y, i) {
       var box = el("div", "yr");
       box.appendChild(el("span", "yr-label", "FY" + String(y).slice(2)));
-      box.appendChild(el("span", "yr-val" + (s.byYear[y] === 0 ? " zero" : ""), String(s.byYear[y])));
+      box.appendChild(el("span", "yr-val" + (s.byYear[i] === 0 ? " zero" : ""),
+        String(s.byYear[i] || 0)));
       yrs.appendChild(box);
     });
     s3.appendChild(yrs);
-    s3.appendChild(el("span", "sig-note", s.stoppedFiling ? "nothing in the most recent year" : "still filing"));
+    s3.appendChild(el("span", "sig-note",
+      s.stoppedFiling ? "nothing in the most recent year" : "still filing"));
     grid.appendChild(s3);
 
-    // Signal 4
     var s4 = el("div", "sig");
     s4.appendChild(el("span", "sig-label", "4 · Wage level"));
     if (s.levels) {
       var lv = el("div", "levels");
-      Object.keys(s.levels).forEach(function (k) {
+      Object.keys(s.levels).sort().forEach(function (k) {
         lv.appendChild(el("span", "lvl", k + " · " + s.levels[k]));
       });
       s4.appendChild(lv);
-      s4.appendChild(el("span", "sig-note", money(s.wageMin) + " – " + money(s.wageMax)));
+      if (s.wageMin !== null) {
+        s4.appendChild(el("span", "sig-note",
+          money(s.wageMin) + " – " + money(s.wageMax) +
+          (s.wageMed ? "  ·  median " + money(s.wageMed) : "")));
+      }
+    } else if (s.roleTotal > 0) {
+      s4.appendChild(el("span", "sig-val sm", "—"));
+      // PERM's revised ETA-9089 has no wage level field at all, so this is
+      // a gap in the source rather than a gap in the data we kept.
+      s4.appendChild(el("span", "sig-note", "not reported for these filings"));
     } else {
       s4.appendChild(el("span", "sig-val sm", "—"));
       s4.appendChild(el("span", "sig-note", "no filings in this role"));
@@ -766,18 +947,26 @@ Brightpath Labs</textarea>
 
     card.appendChild(grid);
 
-    // Signal 5 + notes
     var note = el("p", "note-row");
     if (s.isStaffing) {
-      note.className = "note-row";
       note.textContent = "Staffing and consulting firm. They file heavily, but the job is at a client site, not here — a filing count tells you much less about your odds than it does for a direct employer.";
     } else if (s.hasPerm) {
-      note.textContent = "5 · Also files PERM (green card). LCA " + s.byYear[YEARS[YEARS.length-1]] + " most recent year; PERM history present. USCIS approval counts: not loaded in this preview.";
+      note.textContent = "5 · Also files PERM (green card): " + s.permCount.toLocaleString("en-US") +
+        " certified. USCIS approval counts are not loaded.";
     } else {
       note.className = "note-row warn";
       note.textContent = "5 · No certified PERM filings. They may transfer an H-1B, but there is no green card path on this record.";
     }
     card.appendChild(note);
+
+    if (s.entityCount > 1) {
+      var ents = el("p", "note-row");
+      ents.style.fontSize = "0.8rem";
+      ents.textContent = "Combined: " + s.entityNames.map(titleCase).join(", ") +
+        (s.entityCount > s.entityNames.length
+          ? " and " + (s.entityCount - s.entityNames.length) + " more" : "") + ".";
+      card.appendChild(ents);
+    }
 
     return card;
   }
@@ -788,17 +977,16 @@ Brightpath Labs</textarea>
     head.appendChild(el("p", "co-name", match.input));
     head.appendChild(el("span", "verdict v-unmatched", "No confident match"));
     card.appendChild(head);
-
-    var body = el("p", "note-row", "We could not confidently match this company to an employer in the filing data. This is not a finding that they do not sponsor.");
-    card.appendChild(body);
+    card.appendChild(el("p", "note-row",
+      "We could not confidently match this company to an employer in the filing data. This is not a finding that they do not sponsor."));
 
     if (match.candidates && match.candidates.length) {
       var cand = el("div", "cand");
       cand.appendChild(document.createTextNode("Did you mean: "));
       match.candidates.forEach(function (c) {
-        var b = el("button", null, c.employer.canonical);
+        var b = el("button", null, titleCase(c.name));
         b.type = "button";
-        b.addEventListener("click", function () { rerun(match.input, c.employer.canonical); });
+        b.addEventListener("click", function () { rerun(match.input, c.name); });
         cand.appendChild(b);
       });
       card.appendChild(cand);
@@ -806,8 +994,13 @@ Brightpath Labs</textarea>
     return card;
   }
 
-  // --- populate selects
+  // ---------------------------------------------------------------------
+  // Wiring
+  // ---------------------------------------------------------------------
+
   var roleSel = document.getElementById("role");
+  var metroSel = document.getElementById("metro");
+
   BUCKETS.forEach(function (b) {
     var o = document.createElement("option");
     o.value = b[0]; o.textContent = b[1];
@@ -815,13 +1008,16 @@ Brightpath Labs</textarea>
   });
   roleSel.value = "qa_engineer";
 
-  var metroSel = document.getElementById("metro");
-  METROS.forEach(function (m) {
-    var o = document.createElement("option");
-    o.value = m[0]; o.textContent = m[1];
-    metroSel.appendChild(o);
-  });
-  metroSel.value = "austin";
+  function populateMetros() {
+    var current = metroSel.value;
+    metroSel.innerHTML = "";
+    DATA.metros().forEach(function (m) {
+      var o = document.createElement("option");
+      o.value = m; o.textContent = metroLabel(m);
+      metroSel.appendChild(o);
+    });
+    if (current && DATA.metros().indexOf(current) !== -1) metroSel.value = current;
+  }
 
   function run() {
     var raw = document.getElementById("companies").value
@@ -829,23 +1025,23 @@ Brightpath Labs</textarea>
       .filter(Boolean).slice(0, MAX_COMPANIES);
 
     var bucket = roleSel.value;
-    var bucketLabel = BUCKETS.filter(function (b) { return b[0] === bucket; })[0][1];
-    var metroEntry = METROS.filter(function (m) { return m[0] === metroSel.value; })[0];
-    var metroMult = metroEntry[2], metroLabel = metroEntry[1];
+    var bucketLabel = BUCKET_LABEL[bucket];
+    var metro = metroSel.value;
 
     var matched = [], unmatched = [];
     raw.forEach(function (name) {
-      var m = matchEmployer(name);
+      var m = DATA.match(name);
       if (m.matched) matched.push(m); else unmatched.push(m);
     });
 
-    // headline: companies with zero filings in the user's bucket
     var deadEnds = 0, scoreable = 0;
-    matched.forEach(function (m) {
-      if (m.employer.staffing) return;
-      scoreable++;
-      var s = signalsFor(m.employer, bucket, metroMult);
-      if (s.roleTotal === 0 || s.stoppedFiling) deadEnds++;
+    var scored = matched.map(function (m) {
+      var s = DATA.signals(m, bucket);
+      if (!s.isStaffing) {
+        scoreable++;
+        if (s.roleTotal === 0 || s.stoppedFiling) deadEnds++;
+      }
+      return { match: m, rank: VERDICT_ORDER[verdictFor(s)[0]] };
     });
 
     var headline = document.getElementById("headline");
@@ -854,26 +1050,25 @@ Brightpath Labs</textarea>
     headline.appendChild(document.createTextNode(" of your "));
     headline.appendChild(el("span", "n", String(raw.length)));
     headline.appendChild(document.createTextNode(
-      " applications went to companies with no current certified filings in " + bucketLabel + " roles."));
+      " applications went to companies with no current certified filings in " +
+      bucketLabel + " roles."));
 
-    var subParts = [];
-    if (scoreable - deadEnds > 0) subParts.push((scoreable - deadEnds) + " do file for this role");
-    var staffCount = matched.filter(function (m) { return m.employer.staffing; }).length;
-    if (staffCount) subParts.push(staffCount + " staffing/consulting firm" + (staffCount > 1 ? "s" : "") + " flagged separately");
-    if (unmatched.length) subParts.push(unmatched.length + " could not be matched");
+    var years = DATA.fiscalYears();
+    var parts = [];
+    if (scoreable - deadEnds > 0) parts.push((scoreable - deadEnds) + " do file for this role");
+    var staffCount = scored.length - scoreable;
+    if (staffCount) parts.push(staffCount + " staffing/consulting firm" +
+      (staffCount > 1 ? "s" : "") + " flagged separately");
+    if (unmatched.length) parts.push(unmatched.length + " could not be matched");
     document.getElementById("headline-sub").textContent =
-      subParts.join(" · ") + ". Counts are certified and certified-withdrawn filings, FY2024–FY2026.";
+      parts.join(" · ") + ". Counts are certified determinations, FY" +
+      years[0] + "–FY" + years[years.length - 1] + ".";
 
     var list = document.getElementById("co-list");
     list.innerHTML = "";
-    matched
-      .map(function (m) {
-        var s = signalsFor(m.employer, bucket, metroMult);
-        return { match: m, rank: VERDICT_ORDER[verdictFor(s)[0]] };
-      })
-      .sort(function (a, b) { return a.rank - b.rank; })
+    scored.sort(function (a, b) { return a.rank - b.rank; })
       .forEach(function (entry) {
-        list.appendChild(renderCompany(entry.match, bucket, bucketLabel, metroMult));
+        list.appendChild(renderCompany(entry.match, bucket, bucketLabel));
       });
 
     var ub = document.getElementById("unmatched-block");
@@ -894,46 +1089,49 @@ Brightpath Labs</textarea>
       ub.style.display = "none";
     }
 
-    // wage panel
-    var base = BASE_WAGE[bucket] * metroMult;
+    var stats = DATA.wageStats(bucket, metro);
     var wr = document.getElementById("wage-row");
     wr.innerHTML = "";
-    [["25th percentile", base * 0.84, ""],
-     ["Median", base, "mid"],
-     ["75th percentile", base * 1.19, ""]].forEach(function (f) {
+    if (stats) {
+      [["25th percentile", stats.p25, ""], ["Median", stats.median, "mid"],
+       ["75th percentile", stats.p75, ""]].forEach(function (f) {
+        var box = el("div", "wage-fig");
+        box.appendChild(el("span", "sig-label", f[0]));
+        box.appendChild(el("span", "wage-val " + f[2], money(f[1])));
+        wr.appendChild(box);
+      });
+      document.getElementById("wage-note").textContent =
+        "Annualized wage offered across all employers filing " + bucketLabel +
+        " roles in " + metroLabel(metro) + ", FY" + years[0] + "–FY" +
+        years[years.length - 1] + "." +
+        (stats.count ? " Based on " + stats.count.toLocaleString("en-US") + " filings." : "") +
+        " Hourly, weekly and monthly wages converted to annual.";
+    } else {
       var box = el("div", "wage-fig");
-      box.appendChild(el("span", "sig-label", f[0]));
-      box.appendChild(el("span", "wage-val " + f[2], money(Math.round(f[1] / 1000) * 1000)));
+      box.appendChild(el("span", "sig-label", "Not enough filings"));
+      box.appendChild(el("span", "wage-val", "—"));
       wr.appendChild(box);
-    });
-    document.getElementById("wage-note").textContent =
-      "Annualized wage offered across all employers filing " + bucketLabel +
-      " roles in " + metroLabel + ", FY2024–FY2026. Hourly, weekly and monthly wages converted to annual.";
+      // Withheld rather than computed from a handful of rows, which would
+      // read as authoritative without being so.
+      document.getElementById("wage-note").textContent =
+        "Too few " + bucketLabel + " filings in " + metroLabel(metro) +
+        " to report a meaningful wage range.";
+    }
 
     document.getElementById("results").classList.add("shown");
   }
 
   document.getElementById("run").addEventListener("click", run);
 
-  // Netlify Forms: the markup is statically detectable at deploy time, and
-  // this posts it over AJAX so the page doesn't navigate away from the
-  // results. Off Netlify (artifact preview, file://) the POST just fails
-  // and we still confirm -- the preview shouldn't look broken, but nothing
-  // is stored either.
   document.getElementById("capture-form").addEventListener("submit", function (e) {
     e.preventDefault();
     var form = e.target;
     var ack = document.getElementById("capture-ack");
-
     document.getElementById("capture-role").value = roleSel.value;
     document.getElementById("capture-metro").value = metroSel.value;
 
     var body = new URLSearchParams(new FormData(form)).toString();
-    var done = function (msg) {
-      ack.textContent = msg;
-      ack.style.display = "block";
-    };
-
+    var done = function (msg) { ack.textContent = msg; ack.style.display = "block"; };
     try {
       fetch("/", {
         method: "POST",
@@ -951,6 +1149,42 @@ Brightpath Labs</textarea>
     }
   });
 
-  run();
+  // Load the published index. Until it exists the page runs on invented
+  // demo numbers and says so; once it does, the banner comes down and the
+  // footer states the real window and coverage.
+  function start(source, real) {
+    DATA = source;
+    IS_REAL = real;
+    populateMetros();
+    if (real) {
+      var banner = document.getElementById("demo-banner");
+      if (banner) banner.parentNode.removeChild(banner);
+      var years = DATA.fiscalYears();
+      var win = document.getElementById("data-window");
+      if (win) {
+        win.textContent = "DOL OFLC disclosure data · FY" + years[0] +
+          "–FY" + years[years.length - 1];
+      }
+      var cov = document.getElementById("coverage-note");
+      if (cov && DATA.idx && DATA.idx.meta) {
+        cov.textContent = DATA.idx.meta.note;
+        cov.style.display = "block";
+      }
+    }
+    run();
+  }
+
+  fetch(INDEX_URL, { cache: "no-cache" })
+    .then(function (r) {
+      if (!r.ok) throw new Error("index " + r.status);
+      return r.json();
+    })
+    .then(function (idx) {
+      if (!idx || !idx.employers || !idx.employers.length) throw new Error("empty index");
+      start(new RealIndex(idx), true);
+    })
+    .catch(function () {
+      start(new DemoData(), false);
+    });
 })();
 </script>

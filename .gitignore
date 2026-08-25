@@ -9,4 +9,3 @@ data/processed/*.parquet
 data/processed/*.csv
 data/processed/run_report_*.json
 .pytest_cache/
-web/data/index.json
