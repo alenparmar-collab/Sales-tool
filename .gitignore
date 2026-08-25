@@ -7,5 +7,7 @@ data/raw/layouts/*.pdf
 data/raw/download_manifest.json
 data/processed/*.parquet
 data/processed/*.csv
+!data/processed/top_500_employers.csv
+!data/processed/unmatched_titles_top_100.csv
 data/processed/run_report_*.json
 .pytest_cache/
