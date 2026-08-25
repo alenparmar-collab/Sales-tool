@@ -41,9 +41,20 @@ WEB_DATA_DIR = Path(__file__).resolve().parent.parent / "web" / "data"
 DEFAULT_INPUT = PROCESSED_DIR / "dol_filings.parquet"
 DEFAULT_OUTPUT = WEB_DATA_DIR / "index.json"
 
-# Employers below this many certified filings across the whole window are
-# left out of the detail payload. They stay in the totals.
-MIN_FILINGS = 3
+# Every employer that filed at all is included.
+#
+# This was 3, which dropped 90,420 of 138,656 employers -- all the small and
+# early-stage ones. That made the tool answer "we could not match this
+# company" for a startup that filed twice, which reads as "we have no idea"
+# when the truthful answer is "twice, in FY2025". A job seeker checking a
+# 40-person startup deserves that answer as much as one checking Amazon, and
+# a no-match on a real sponsor is the specific failure this product cannot
+# afford.
+#
+# Measured cost: the smallest currently-included records average 149 bytes,
+# so adding the whole tail projects to roughly 26 MB against a 50 MB budget.
+# write_index warns if that estimate turns out wrong.
+MIN_FILINGS = 1
 
 # Wage percentiles are only published for metros with enough filings in a
 # bucket for the number to mean anything.

@@ -50,10 +50,28 @@
 # at a client site, not at the employer named. Set for the IT services and
 # staffing firms below.
 #
-# Left FALSE for Deloitte, EY, PwC, KPMG, McKinsey and BCG, on the reading
-# that you are hired by the firm rather than placed by it, even though the
-# work happens at clients. That is a judgment call and yours to make --
-# flipping any of them is a one-word edit.
+# DECIDED: left FALSE for Deloitte, EY, PwC, KPMG, McKinsey and BCG.
+#
+# The filings support the distinction rather than just intuition. Share of
+# an employer's certified filings that are PERM -- i.e. green card, the
+# thing you only sponsor for someone you intend to keep:
+#
+#   McKinsey        26.2%      Cognizant        0.0%
+#   KPMG            11.7%      Infosys          0.0%
+#   Deloitte         9.3%      TCS              2.4%
+#   PwC              9.3%
+#   EY               3.2%
+#
+# Cognizant and Infosys have filed 44,397 certified LCAs between them across
+# this window and not one PERM. That is the signal-five case exactly: they
+# will move an H-1B, but there is no green card path there. The Big 4 do
+# sponsor permanently, so scoring them like a direct employer is the honest
+# treatment.
+#
+# Note the split is not clean -- Wipro is at 7.7% and Compunnel 9.6%, close
+# to Deloitte. They stay flagged anyway, because the flag is about the job
+# being at a client site rather than about PERM rates; PERM is corroboration
+# here, not the definition. Reverse any of these with a one-word edit.
 # ---------------------------------------------------------------------------
 
 employers:
