@@ -1,23 +1,672 @@
-# Hand-built alias map: normalized employer-name variants -> one canonical
-# employer. Built by hand from data/processed/top_500_employers.csv after
-# running src/employer_top_n.py against real pipeline output (this file
-# starts empty because this pipeline has never run against real DOL data --
-# see README.md).
+# Employer alias map: filing entities -> one canonical employer.
 #
-# Structure: each entry is a canonical employer with a list of normalized
-# name variants (as produced by employer_normalize.normalize_employer_name)
-# that should all resolve to it. is_staffing_or_consulting marks employers
-# whose answer to "does this company sponsor" is different in kind (they
-# file on behalf of client placements) -- these get flagged, not scored.
+# DOL files list legal entities, not companies. Amazon appears as six
+# separate entities totalling 65,038 filings; without this map a search for
+# "Amazon" reports 44,068 and understates by a third. This file is what says
+# those entities are one employer, and src/build_index.py applies it when
+# building the index the site serves.
 #
-# Example (fill in for real once top_500_employers.csv exists):
-# - canonical: "Amazon"
-#   employer_id: amazon
-#   is_staffing_or_consulting: false
-#   variants:
-#     - "AMAZON COM"
-#     - "AMAZON WEB"
-#     - "AMAZON DEVELOPMENT CENTER U S"
-#     - "AMAZON DATA"
+# ---------------------------------------------------------------------------
+# STATUS: DRAFT, PENDING REVIEW.
+#
+# Written from the real top-employer list produced by the 2026-08-25 run
+# (1,775,106 certified filings, 138,656 distinct employers). Every `variants`
+# string below was copied from the actual index, so they match exactly. The
+# groupings are my reading of which entities are the same company; that is
+# the part worth a second pair of eyes, since a wrong grouping here silently
+# overstates an employer's volume.
+#
+# Covers roughly the top 90 employers by volume. Below that the tail is long
+# and thin -- employers absent from this file simply stay un-merged, which is
+# correct behaviour rather than breakage. Extend from
+# data/processed/top_500_employers.csv whenever you have an hour.
+#
+# ---------------------------------------------------------------------------
+# WHAT I DELIBERATELY DID NOT MERGE, and why. These share a leading word but
+# are different companies; merging them would be a real error:
+#
+#   META PLATFORMS      is Meta. META IT, METAFORGE IT, METASENSE,
+#                       METAHORIZON and METAPICKS are unrelated firms.
+#   TATA CONSULTANCY    is TCS. TATA ELXSI and TATA COMMUNICATIONS are
+#                       separate Tata group companies. Bare "TATA" (328
+#                       filings) is ambiguous and left alone.
+#   APPLE               is Apple. APPLEXUS, APPLET and APPLE PROCESSING are
+#                       not. APPLE PAYMENTS (58) probably is, but "probably"
+#                       is not good enough to merge.
+#   UST                 is UST Global. USTRING and USTECHSYSTEM are not.
+#   CGI TECHNOLOGIES    is CGI. CGINFOSYS is a different firm.
+#   INFINITE COMPUTER   is one firm; INFINITE CONSULTING / TEK / GATEWAY are
+#                       others.
+#   GOLDMAN SACHS       entities merged; GOLDMAN EDWARDS is unrelated.
+#
+# The same trap appears elsewhere in the data with GENERAL MOTORS vs GENERAL
+# HOSPITAL, TEXAS A M vs TEXAS INSTRUMENTS, and NORTHWESTERN UNIVERSITY vs
+# NORTHWESTERN MUTUAL. Watch for it as you extend this file.
+#
+# ---------------------------------------------------------------------------
+# ON is_staffing_or_consulting:
+#
+# Set true where a filing tells you little about your odds because the job is
+# at a client site, not at the employer named. Set for the IT services and
+# staffing firms below.
+#
+# Left FALSE for Deloitte, EY, PwC, KPMG, McKinsey and BCG, on the reading
+# that you are hired by the firm rather than placed by it, even though the
+# work happens at clients. That is a judgment call and yours to make --
+# flipping any of them is a one-word edit.
+# ---------------------------------------------------------------------------
 
-employers: []
+employers:
+  # ---- large direct employers ------------------------------------
+  - canonical: "Amazon"
+    employer_id: amazon
+    is_staffing_or_consulting: false
+    variants:
+      - "AMAZON COM"
+      - "AMAZON WEB"
+      - "AMAZON DEVELOPMENT CENTER U S"
+      - "AMAZON DATA"
+      - "AMAZON ADVERTISING"
+      - "AMAZON PAYMENTS"
+
+  - canonical: "Microsoft"
+    employer_id: microsoft
+    is_staffing_or_consulting: false
+    variants:
+      - "MICROSOFT"
+
+  - canonical: "Google"
+    employer_id: google
+    is_staffing_or_consulting: false
+    variants:
+      - "GOOGLE"
+      - "GOOGLE PUBLIC SECTOR"
+
+  - canonical: "Meta"
+    employer_id: meta
+    is_staffing_or_consulting: false
+    variants:
+      - "META PLATFORMS"
+
+  - canonical: "Apple"
+    employer_id: apple
+    is_staffing_or_consulting: false
+    variants:
+      - "APPLE"
+
+  - canonical: "Walmart"
+    employer_id: walmart
+    is_staffing_or_consulting: false
+    variants:
+      - "WAL MART ASSOCIATES"
+
+  - canonical: "JPMorgan Chase"
+    employer_id: jpmorgan_chase
+    is_staffing_or_consulting: false
+    variants:
+      - "JPMORGAN CHASE"
+
+  - canonical: "Intel"
+    employer_id: intel
+    is_staffing_or_consulting: false
+    variants:
+      - "INTEL"
+
+  - canonical: "Tesla"
+    employer_id: tesla
+    is_staffing_or_consulting: false
+    variants:
+      - "TESLA"
+
+  - canonical: "IBM"
+    employer_id: ibm
+    is_staffing_or_consulting: false
+    variants:
+      - "IBM"
+
+  - canonical: "Salesforce"
+    employer_id: salesforce
+    is_staffing_or_consulting: false
+    variants:
+      - "SALESFORCE"
+
+  - canonical: "NVIDIA"
+    employer_id: nvidia
+    is_staffing_or_consulting: false
+    variants:
+      - "NVIDIA"
+
+  - canonical: "Goldman Sachs"
+    employer_id: goldman_sachs
+    is_staffing_or_consulting: false
+    variants:
+      - "GOLDMAN SACHS"
+      - "GOLDMAN SACHS BANK"
+      - "GOLDMAN SACHS WEALTH SERVICES L P"
+
+  - canonical: "Qualcomm"
+    employer_id: qualcomm
+    is_staffing_or_consulting: false
+    variants:
+      - "QUALCOMM"
+
+  - canonical: "Cisco"
+    employer_id: cisco
+    is_staffing_or_consulting: false
+    variants:
+      - "CISCO"
+
+  - canonical: "Oracle"
+    employer_id: oracle
+    is_staffing_or_consulting: false
+    variants:
+      - "ORACLE AMERICA"
+      - "ORACLE FINANCIAL SERVICES SOFTWARE"
+
+  - canonical: "Adobe"
+    employer_id: adobe
+    is_staffing_or_consulting: false
+    variants:
+      - "ADOBE"
+
+  - canonical: "Citi"
+    employer_id: citi
+    is_staffing_or_consulting: false
+    variants:
+      - "CITIBANK"
+
+  - canonical: "Fidelity Investments"
+    employer_id: fidelity_investments
+    is_staffing_or_consulting: false
+    variants:
+      - "FIDELITY TECHNOLOGY GROUP LLC D B A FIDELITY INVESTMENTS"
+      - "FIDELITY"
+      - "FIDELITY BROKERAGE SERVICES LLC D B A FIDELITY INVESTMENTS"
+      - "FIDELITY BROKERAGE"
+      - "FIDELITY WORKPLACE INVESTING LLC D B A FIDELITY INVESTMENTS"
+      - "FIDELITY MANAGEMENT RESEARCH COMPANY LLC D B A FIDELITY INVESTMENTS"
+
+  - canonical: "PayPal"
+    employer_id: paypal
+    is_staffing_or_consulting: false
+    variants:
+      - "PAYPAL"
+
+  - canonical: "LinkedIn"
+    employer_id: linkedin
+    is_staffing_or_consulting: false
+    variants:
+      - "LINKEDIN"
+
+  - canonical: "ByteDance"
+    employer_id: bytedance
+    is_staffing_or_consulting: false
+    variants:
+      - "BYTEDANCE"
+
+  - canonical: "TikTok"
+    employer_id: tiktok
+    is_staffing_or_consulting: false
+    variants:
+      - "TIKTOK"
+      - "TIKTOK U S DATA SECURITY"
+
+  - canonical: "Uber"
+    employer_id: uber
+    is_staffing_or_consulting: false
+    variants:
+      - "UBER"
+
+  - canonical: "Morgan Stanley"
+    employer_id: morgan_stanley
+    is_staffing_or_consulting: false
+    variants:
+      - "MORGAN STANLEY"
+
+  - canonical: "ServiceNow"
+    employer_id: servicenow
+    is_staffing_or_consulting: false
+    variants:
+      - "SERVICENOW"
+
+  - canonical: "Capital One"
+    employer_id: capital_one
+    is_staffing_or_consulting: false
+    variants:
+      - "CAPITAL ONE"
+      - "CAPITAL ONE NATIONAL ASSOCIATION"
+
+  - canonical: "Ford"
+    employer_id: ford
+    is_staffing_or_consulting: false
+    variants:
+      - "FORD MOTOR"
+
+  - canonical: "General Motors"
+    employer_id: general_motors
+    is_staffing_or_consulting: false
+    variants:
+      - "GENERAL MOTORS"
+
+  - canonical: "eBay"
+    employer_id: ebay
+    is_staffing_or_consulting: false
+    variants:
+      - "EBAY"
+
+  - canonical: "AMD"
+    employer_id: amd
+    is_staffing_or_consulting: false
+    variants:
+      - "ADVANCED MICRO DEVICES"
+
+  - canonical: "Intuit"
+    employer_id: intuit
+    is_staffing_or_consulting: false
+    variants:
+      - "INTUIT"
+
+  - canonical: "Bank of America"
+    employer_id: bank_of_america
+    is_staffing_or_consulting: false
+    variants:
+      - "BANK OF AMERICA"
+
+  - canonical: "Wells Fargo"
+    employer_id: wells_fargo
+    is_staffing_or_consulting: false
+    variants:
+      - "WELLS FARGO BANK"
+
+  - canonical: "American Express"
+    employer_id: american_express
+    is_staffing_or_consulting: false
+    variants:
+      - "AMERICAN EXPRESS TRAVEL RELATED"
+
+  - canonical: "Visa"
+    employer_id: visa
+    is_staffing_or_consulting: false
+    variants:
+      - "VISA"
+      - "VISA TECHNOLOGY OPERATIONS"
+
+  - canonical: "Mastercard"
+    employer_id: mastercard
+    is_staffing_or_consulting: false
+    variants:
+      - "MASTERCARD"
+      - "MASTERCARD INTERNATIONAL INCORPORATED"
+
+  - canonical: "Comcast"
+    employer_id: comcast
+    is_staffing_or_consulting: false
+    variants:
+      - "COMCAST CABLE COMMUNICATIONS"
+
+  - canonical: "Palo Alto Networks"
+    employer_id: palo_alto_networks
+    is_staffing_or_consulting: false
+    variants:
+      - "PALO ALTO NETWORKS"
+
+  - canonical: "AT&T"
+    employer_id: atandt
+    is_staffing_or_consulting: false
+    variants:
+      - "AT T"
+
+  - canonical: "Hewlett Packard Enterprise"
+    employer_id: hewlett_packard_enterprise
+    is_staffing_or_consulting: false
+    variants:
+      - "HEWLETT PACKARD ENTERPRISE"
+
+  - canonical: "FedEx"
+    employer_id: fedex
+    is_staffing_or_consulting: false
+    variants:
+      - "FEDERAL EXPRESS"
+
+  - canonical: "Bloomberg"
+    employer_id: bloomberg
+    is_staffing_or_consulting: false
+    variants:
+      - "BLOOMBERG L P"
+
+  - canonical: "Applied Materials"
+    employer_id: applied_materials
+    is_staffing_or_consulting: false
+    variants:
+      - "APPLIED MATERIALS"
+
+  - canonical: "DoorDash"
+    employer_id: doordash
+    is_staffing_or_consulting: false
+    variants:
+      - "DOORDASH"
+
+  - canonical: "Micron"
+    employer_id: micron
+    is_staffing_or_consulting: false
+    variants:
+      - "MICRON"
+
+  - canonical: "Charles Schwab"
+    employer_id: charles_schwab
+    is_staffing_or_consulting: false
+    variants:
+      - "CHARLES SCHWAB"
+
+  - canonical: "Expedia"
+    employer_id: expedia
+    is_staffing_or_consulting: false
+    variants:
+      - "EXPEDIA"
+
+  - canonical: "T-Mobile"
+    employer_id: t_mobile
+    is_staffing_or_consulting: false
+    variants:
+      - "T MOBILE"
+
+  - canonical: "Snowflake"
+    employer_id: snowflake
+    is_staffing_or_consulting: false
+    variants:
+      - "SNOWFLAKE"
+
+  - canonical: "Databricks"
+    employer_id: databricks
+    is_staffing_or_consulting: false
+    variants:
+      - "DATABRICKS"
+
+  - canonical: "BlackRock"
+    employer_id: blackrock
+    is_staffing_or_consulting: false
+    variants:
+      - "BLACKROCK FINANCIAL MANAGEMENT"
+
+  - canonical: "Fiserv"
+    employer_id: fiserv
+    is_staffing_or_consulting: false
+    variants:
+      - "FISERV"
+
+  - canonical: "Rivian"
+    employer_id: rivian
+    is_staffing_or_consulting: false
+    variants:
+      - "RIVIAN AUTOMOTIVE"
+
+  - canonical: "Lucid Motors"
+    employer_id: lucid_motors
+    is_staffing_or_consulting: false
+    variants:
+      - "LUCID"
+
+  - canonical: "Barclays"
+    employer_id: barclays
+    is_staffing_or_consulting: false
+    variants:
+      - "BARCLAYS"
+
+  - canonical: "Cummins"
+    employer_id: cummins
+    is_staffing_or_consulting: false
+    variants:
+      - "CUMMINS"
+
+  - canonical: "ASML"
+    employer_id: asml
+    is_staffing_or_consulting: false
+    variants:
+      - "ASML"
+
+  - canonical: "Mayo Clinic"
+    employer_id: mayo_clinic
+    is_staffing_or_consulting: false
+    variants:
+      - "MAYO CLINIC"
+
+  - canonical: "Charter Communications"
+    employer_id: charter_communications
+    is_staffing_or_consulting: false
+    variants:
+      - "CHARTER COMMUNICATIONS"
+
+  - canonical: "ADP"
+    employer_id: adp
+    is_staffing_or_consulting: false
+    variants:
+      - "ADP"
+
+  - canonical: "Elevance Health"
+    employer_id: elevance_health
+    is_staffing_or_consulting: false
+    variants:
+      - "ELEVANCE HEALTH"
+
+  - canonical: "Optum"
+    employer_id: optum
+    is_staffing_or_consulting: false
+    variants:
+      - "OPTUM"
+
+  - canonical: "U.S. Bank"
+    employer_id: us_bank
+    is_staffing_or_consulting: false
+    variants:
+      - "U S BANK NATIONAL ASSOCIATION"
+
+  # ---- professional services -------------------------------------
+  - canonical: "Deloitte"
+    employer_id: deloitte
+    is_staffing_or_consulting: false
+    variants:
+      - "DELOITTE CONSULTING"
+      - "DELOITTE TOUCHE"
+      - "DELOITTE TAX"
+      - "DELOITTE"
+      - "DELOITTE TOUCHE TOHMATSU"
+      - "DELOITTE TRANSACTIONS AND BUSINESS ANALYTICS"
+
+  - canonical: "EY"
+    employer_id: ey
+    is_staffing_or_consulting: false
+    variants:
+      - "ERNST YOUNG U S"
+      - "ERNST YOUNG LLP EY GUAM"
+      - "ERNST YOUNG INFRASTRUCTURE ADVISORS"
+
+  - canonical: "PwC"
+    employer_id: pwc
+    is_staffing_or_consulting: false
+    variants:
+      - "PRICEWATERHOUSECOOPERS ADVISORY"
+      - "PRICEWATERHOUSECOOPERS"
+      - "PRICEWATERHOUSECOOPERS IT"
+      - "PRICEWATERHOUSECOOPERS CORPORATE FINANCE"
+
+  - canonical: "KPMG"
+    employer_id: kpmg
+    is_staffing_or_consulting: false
+    variants:
+      - "KPMG"
+
+  - canonical: "McKinsey & Company"
+    employer_id: mckinsey_and_company
+    is_staffing_or_consulting: false
+    variants:
+      - "MCKINSEY COMPANY INC UNITED STATES"
+
+  - canonical: "Boston Consulting Group"
+    employer_id: boston_consulting_group
+    is_staffing_or_consulting: false
+    variants:
+      - "BOSTON CONSULTING"
+      - "THE BOSTON CONSULTING"
+
+  # ---- IT services and staffing ----------------------------------
+  - canonical: "Cognizant"
+    employer_id: cognizant
+    is_staffing_or_consulting: true
+    variants:
+      - "COGNIZANT"
+      - "COGNIZANT TRIZETTO SOFTWARE"
+      - "COGNIZANT WORLDWIDE LIMITED"
+      - "COGNIZANT MOBILITY"
+
+  - canonical: "Tata Consultancy Services"
+    employer_id: tata_consultancy_services
+    is_staffing_or_consulting: true
+    variants:
+      - "TATA CONSULTANCY SERVICES LIMITED"
+
+  - canonical: "Infosys"
+    employer_id: infosys
+    is_staffing_or_consulting: true
+    variants:
+      - "INFOSYS LIMITED"
+      - "INFOSYS BPM LIMITED"
+      - "INFOSYS NOVA"
+      - "INFOSYS PUBLIC"
+      - "INFOSYS MCCAMISH"
+
+  - canonical: "HCLTech"
+    employer_id: hcltech
+    is_staffing_or_consulting: true
+    variants:
+      - "HCL AMERICA"
+      - "HCL"
+
+  - canonical: "Capgemini"
+    employer_id: capgemini
+    is_staffing_or_consulting: true
+    variants:
+      - "CAPGEMINI AMERICA"
+
+  - canonical: "Accenture"
+    employer_id: accenture
+    is_staffing_or_consulting: true
+    variants:
+      - "ACCENTURE"
+      - "ACCENTURE INFRASTRUCTURE AND CAPITAL PROJECTS"
+      - "ACCENTURE INFRASTRUCTURE CAPITAL PROJECTS"
+      - "ACCENTURE NATIONAL"
+
+  - canonical: "Wipro"
+    employer_id: wipro
+    is_staffing_or_consulting: true
+    variants:
+      - "WIPRO LIMITED"
+      - "WIPRO VLSI DESIGN"
+      - "WIPRO NEXTGEN ENTERPRISE"
+      - "WIPRO APPIRIO"
+
+  - canonical: "LTIMindtree"
+    employer_id: ltimindtree
+    is_staffing_or_consulting: true
+    variants:
+      - "LTIMINDTREE LIMITED"
+      - "LTIMINDTREE LIMITED FORMERLY KNOWN AS LARSEN TOUBRO INFOTECH LIMITED"
+
+  - canonical: "Tech Mahindra"
+    employer_id: tech_mahindra
+    is_staffing_or_consulting: true
+    variants:
+      - "TECH MAHINDRA AMERICAS"
+      - "TECH MAHINDRA AMERICAS INC FORMERLY MBT"
+      - "TECH MAHINDRA"
+      - "TECH MAHINDRA NETWORK"
+
+  - canonical: "Mphasis"
+    employer_id: mphasis
+    is_staffing_or_consulting: true
+    variants:
+      - "MPHASIS"
+
+  - canonical: "Virtusa"
+    employer_id: virtusa
+    is_staffing_or_consulting: true
+    variants:
+      - "VIRTUSA"
+      - "VIRTUSA CONSULTING SERVICES PVT"
+
+  - canonical: "LTTS"
+    employer_id: ltts
+    is_staffing_or_consulting: true
+    variants:
+      - "L T TECHNOLOGY SERVICES LIMITED"
+      - "L T TECH"
+
+  - canonical: "Compunnel"
+    employer_id: compunnel
+    is_staffing_or_consulting: true
+    variants:
+      - "COMPUNNEL SOFTWARE"
+
+  - canonical: "UST"
+    employer_id: ust
+    is_staffing_or_consulting: true
+    variants:
+      - "UST"
+      - "UST HEALTHPROOF"
+
+  - canonical: "Randstad"
+    employer_id: randstad
+    is_staffing_or_consulting: true
+    variants:
+      - "RANDSTAD DIGITAL"
+      - "RANDSTAD GENERAL PARTNER"
+      - "RANDSTAD"
+      - "RANDSTAD PROFESSIONALS"
+
+  - canonical: "Hexaware"
+    employer_id: hexaware
+    is_staffing_or_consulting: true
+    variants:
+      - "HEXAWARE"
+
+  - canonical: "Synechron"
+    employer_id: synechron
+    is_staffing_or_consulting: true
+    variants:
+      - "SYNECHRON"
+      - "SYNECHRON TECHNOLOGIES INC F K A ATTRA"
+
+  - canonical: "Persistent Systems"
+    employer_id: persistent_systems
+    is_staffing_or_consulting: true
+    variants:
+      - "PERSISTENT SYSTEMS LIMITED"
+      - "PERSISTENT"
+
+  - canonical: "NTT Data"
+    employer_id: ntt_data
+    is_staffing_or_consulting: true
+    variants:
+      - "NTT DATA AMERICAS"
+      - "NTT DATA"
+      - "NTT DATA BUSINESS"
+      - "NTT MANAGED SERVICES AMERICAS"
+
+  - canonical: "CGI"
+    employer_id: cgi
+    is_staffing_or_consulting: true
+    variants:
+      - "CGI TECHNOLOGIES AND"
+      - "CGI FEDERAL"
+
+  - canonical: "Kforce"
+    employer_id: kforce
+    is_staffing_or_consulting: true
+    variants:
+      - "KFORCE"
+
+  - canonical: "Infinite Computer Solutions"
+    employer_id: infinite_computer_solutions
+    is_staffing_or_consulting: true
+    variants:
+      - "INFINITE COMPUTER"

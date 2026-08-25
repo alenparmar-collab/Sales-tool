@@ -602,7 +602,20 @@ Brightpath Labs</textarea>
     });
     if (hits.length) {
       hits.sort(function (a, b) { return b.t - a.t; });
-      return { matched: true, input: raw, entities: hits, score: 100 };
+      // Only ONE entity is reported. Sharing a leading word does not make
+      // two employers the same company -- GENERAL MOTORS and GENERAL
+      // HOSPITAL, NORTHWESTERN UNIVERSITY and NORTHWESTERN MUTUAL, TEXAS
+      // A M and TEXAS INSTRUMENTS all collide here. Summing them would
+      // silently overstate. Entities that genuinely belong together are
+      // merged upstream by the curated alias map, which arrives as a
+      // single index row; anything still separate is offered as a choice
+      // rather than guessed at.
+      return {
+        matched: true, input: raw, entities: [hits[0]], score: 100,
+        siblings: hits.slice(1, 6).map(function (e) {
+          return { name: e.n, total: e.t };
+        })
+      };
     }
 
     // Nothing prefixed. Fall back to fuzzy, and refuse below threshold.
@@ -876,7 +889,7 @@ Brightpath Labs</textarea>
     return ["v-files", "Files for your role"];
   }
 
-  function renderCompany(match, bucket, bucketLabel) {
+  function renderCompany(match, bucket, bucketLabel, onPick) {
     var s = DATA.signals(match, bucket);
     var years = DATA.fiscalYears();
     var card = el("article", "co");
@@ -967,6 +980,21 @@ Brightpath Labs</textarea>
     }
     card.appendChild(note);
 
+    // Entities that share a leading word but were not confirmed as the
+    // same company by the alias map. Offered, never summed.
+    if (match.siblings && match.siblings.length) {
+      var sib = el("div", "cand");
+      sib.appendChild(document.createTextNode("Other employers with similar names: "));
+      match.siblings.forEach(function (c) {
+        var b = el("button", null, titleCase(c.name) + " (" +
+          c.total.toLocaleString("en-US") + ")");
+        b.type = "button";
+        b.addEventListener("click", function () { onPick(match.input, c.name); });
+        sib.appendChild(b);
+      });
+      card.appendChild(sib);
+    }
+
     if (s.entityCount > 1) {
       var ents = el("p", "note-row");
       ents.style.fontSize = "0.8rem";
@@ -1027,6 +1055,15 @@ Brightpath Labs</textarea>
     if (current && DATA.metros().indexOf(current) !== -1) metroSel.value = current;
   }
 
+  // Replace one typed line with a specific employer name and re-check.
+  function swapCompany(original, replacement) {
+    var ta = document.getElementById("companies");
+    ta.value = ta.value.split("\n").map(function (line) {
+      return line.trim() === original ? replacement : line;
+    }).join("\n");
+    run();
+  }
+
   function run() {
     var raw = document.getElementById("companies").value
       .split("\n").map(function (s) { return s.trim(); })
@@ -1076,7 +1113,7 @@ Brightpath Labs</textarea>
     list.innerHTML = "";
     scored.sort(function (a, b) { return a.rank - b.rank; })
       .forEach(function (entry) {
-        list.appendChild(renderCompany(entry.match, bucket, bucketLabel));
+        list.appendChild(renderCompany(entry.match, bucket, bucketLabel, swapCompany));
       });
 
     var ub = document.getElementById("unmatched-block");
@@ -1085,13 +1122,7 @@ Brightpath Labs</textarea>
     if (unmatched.length) {
       ub.style.display = "block";
       unmatched.forEach(function (m) {
-        ul.appendChild(renderUnmatched(m, function (original, replacement) {
-          var ta = document.getElementById("companies");
-          ta.value = ta.value.split("\n").map(function (line) {
-            return line.trim() === original ? replacement : line;
-          }).join("\n");
-          run();
-        }));
+        ul.appendChild(renderUnmatched(m, swapCompany));
       });
     } else {
       ub.style.display = "none";
