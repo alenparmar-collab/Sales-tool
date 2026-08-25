@@ -86,6 +86,7 @@ jobs:
             data/processed/top_500_employers.csv
             data/processed/unmatched_titles_top_100.csv
             data/raw/download_manifest.json
+            web/data/index.json
           if-no-files-found: warn
           retention-days: 30
 

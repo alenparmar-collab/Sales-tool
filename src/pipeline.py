@@ -12,6 +12,7 @@ import pandas as pd
 from .discover_sources import PERFORMANCE_PAGE, get_sources
 from .download import download_sources
 from .employer_normalize import normalize_employer_name
+from .build_index import write_index
 from .employer_top_n import write_top_employers
 from .parse_lca import parse_lca_file
 from .parse_perm import parse_perm_file
@@ -127,6 +128,11 @@ def run(
     top_employers_path = write_top_employers(combined_df)
     unmatched_path = write_top_unmatched_titles(combined_df)
     logger.info("Wrote %s and %s", top_employers_path, unmatched_path)
+
+    # The static payload the front end queries directly. Built here so a
+    # quarterly rerun refreshes the site's data in the same pass.
+    index_path = write_index(combined_df)
+    logger.info("Wrote browser index to %s", index_path)
 
     report = build_report(per_file_stats, combined_df)
     report["duplicate_case_numbers_dropped"] = duplicate_rows
