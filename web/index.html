@@ -633,11 +633,19 @@ Brightpath Labs</textarea>
     var roleByYear = years.map(function () { return 0; });
     var levels = {}, wMin = null, wMax = null, wMed = null;
     var staffing = false;
+    var mergedNames = [];
+    ents.forEach(function (e) {
+      if (e.e) { mergedNames = mergedNames.concat(e.e); }
+      else { mergedNames.push(e.n); }
+    });
+    if (mergedNames.length <= 1) mergedNames = [];
 
     ents.forEach(function (e) {
       total += e.t;
       perm += e.p || 0;
-      if (isStaffing(e.n)) staffing = true;
+      // e.s is set by the index from the curated configs; the name-prefix
+      // check is only a fallback for employers the curation hasn't reached.
+      if (e.s === 1 || isStaffing(e.n)) staffing = true;
       (e.y || []).forEach(function (v, i) { byYear[i] += v; });
 
       var b = e.b && e.b[bucket];
@@ -677,8 +685,8 @@ Brightpath Labs</textarea>
       hasPerm: perm > 0,
       permCount: perm,
       isStaffing: staffing,
-      entityCount: ents.length,
-      entityNames: ents.slice(0, 6).map(function (e) { return e.n; })
+      entityCount: mergedNames.length || ents.length,
+      entityNames: (mergedNames.length ? mergedNames : ents.map(function (e) { return e.n; })).slice(0, 6)
     };
   };
 

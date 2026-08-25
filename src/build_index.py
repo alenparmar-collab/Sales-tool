@@ -31,6 +31,7 @@ from typing import Optional
 
 import pandas as pd
 
+from .employer_match import load_employer_alias_map, load_staffing_map
 from .signals import main_counts_only
 
 logger = logging.getLogger(__name__)
@@ -63,13 +64,60 @@ def _wage_triplet(wages: pd.Series) -> Optional[list]:
     return [int(w.min()), int(w.median()), int(w.max())]
 
 
+def _grouping_key(
+    names: pd.Series, alias_map: dict
+) -> pd.Series:
+    """Collapse an employer's filing entities onto one canonical name.
+
+    Real filings arrive split across legal entities -- AMAZON COM,
+    AMAZON WEB, AMAZON DATA are three separate rows in the source. The
+    hand-built alias map in config/employer_aliases.yaml is what says these
+    are one employer, and this is where that decision has to be applied:
+    grouping on the raw normalized name would leave the entities separate
+    in the shipped index no matter how carefully the map was curated.
+
+    Employers absent from the map group under their own name, so an empty
+    or partial map degrades to the un-merged behaviour rather than failing.
+    """
+    if not alias_map:
+        return names
+    lookup = {k: (v.get("canonical") or k) for k, v in alias_map.items()}
+    return names.map(lambda n: lookup.get(n, n))
+
+
 def build_index(
     df: pd.DataFrame,
     min_filings: int = MIN_FILINGS,
     fiscal_years: Optional[list] = None,
+    alias_map: Optional[dict] = None,
+    staffing_map: Optional[dict] = None,
 ) -> dict:
+    if alias_map is None:
+        alias_map = load_employer_alias_map()
+    if staffing_map is None:
+        staffing_map = load_staffing_map()
+
     certified = main_counts_only(df).copy()
     certified["metro"] = _metro_series(certified)
+
+    # Keep the pre-merge names so the index can say which entities were
+    # combined -- a user who searches "Amazon" should be able to see that
+    # the number spans several filing entities.
+    certified["source_entity"] = certified["employer_normalized"]
+    certified["employer_normalized"] = _grouping_key(
+        certified["employer_normalized"], alias_map
+    )
+
+    # Staffing/consulting flags come from the curated configs rather than
+    # from name guessing, for any employer the curation covers.
+    staffing_names = set()
+    for k, firm in (staffing_map or {}).items():
+        staffing_names.add(k)
+        if firm.get("canonical"):
+            staffing_names.add(firm["canonical"])
+    for k, emp in (alias_map or {}).items():
+        if emp.get("is_staffing_or_consulting"):
+            staffing_names.add(emp.get("canonical") or k)
 
     years = fiscal_years or sorted(
         int(y) for y in certified["fiscal_year"].dropna().unique()
@@ -105,6 +153,11 @@ def build_index(
             "p": perm_count,
             "b": {},
         }
+        if name in staffing_names:
+            record["s"] = 1
+        entities = sorted(set(grp["source_entity"].dropna()))
+        if len(entities) > 1:
+            record["e"] = entities[:8]
 
         for bucket, bgrp in grp.groupby("role_bucket", sort=False):
             if bucket == "other" and len(bgrp) < min_filings:

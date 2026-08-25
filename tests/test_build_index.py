@@ -139,3 +139,67 @@ def test_written_index_is_valid_compact_json(df, tmp_path):
     # Written with compact separators -- every byte is bandwidth on a page
     # that ships this to each visitor.
     assert len(raw) < len(json.dumps(parsed))
+
+
+ALIAS_FIXTURE = {
+    "AMAZON COM": {"canonical": "Amazon", "employer_id": "amazon"},
+    "AMAZON WEB": {"canonical": "Amazon", "employer_id": "amazon"},
+    "AMAZON DATA": {"canonical": "Amazon", "employer_id": "amazon"},
+    "COGNIZANT TECHNOLOGY": {
+        "canonical": "Cognizant", "employer_id": "cognizant",
+        "is_staffing_or_consulting": True,
+    },
+}
+
+
+def _multi_entity_df():
+    rows = []
+    for ent in ["AMAZON COM", "AMAZON WEB", "AMAZON DATA"]:
+        for i in range(5):
+            rows.append(_row(case_number=f"{ent}-{i}", employer_normalized=ent,
+                             employer_raw=ent, fiscal_year=[2024, 2025, 2026][i % 3]))
+    for i in range(5):
+        rows.append(_row(case_number=f"COG-{i}", employer_normalized="COGNIZANT TECHNOLOGY",
+                         employer_raw="Cognizant Technology Solutions"))
+    return pd.DataFrame(rows)
+
+
+def test_alias_map_merges_filing_entities():
+    # Without this the curated alias map has no effect on the shipped data:
+    # AMAZON COM / WEB / DATA stay three rows and every Amazon count is a
+    # third of the truth.
+    df = _multi_entity_df()
+    idx = build_index(df, min_filings=3, alias_map=ALIAS_FIXTURE, staffing_map={})
+    names = {e["n"] for e in idx["employers"]}
+    assert "Amazon" in names
+    assert "AMAZON COM" not in names
+
+    amazon = next(e for e in idx["employers"] if e["n"] == "Amazon")
+    assert amazon["t"] == 15  # 3 entities x 5 filings, counted once each
+    assert sum(amazon["y"]) == 15
+
+
+def test_merged_entities_are_named_in_the_index():
+    # A user seeing one combined number should be able to see what it spans.
+    idx = build_index(_multi_entity_df(), min_filings=3,
+                      alias_map=ALIAS_FIXTURE, staffing_map={})
+    amazon = next(e for e in idx["employers"] if e["n"] == "Amazon")
+    assert set(amazon["e"]) == {"AMAZON COM", "AMAZON WEB", "AMAZON DATA"}
+
+
+def test_staffing_flag_comes_from_curation_not_name_guessing():
+    idx = build_index(_multi_entity_df(), min_filings=3,
+                      alias_map=ALIAS_FIXTURE, staffing_map={})
+    cog = next(e for e in idx["employers"] if e["n"] == "Cognizant")
+    assert cog.get("s") == 1
+    amazon = next(e for e in idx["employers"] if e["n"] == "Amazon")
+    assert "s" not in amazon
+
+
+def test_empty_alias_map_degrades_to_unmerged():
+    # An empty or partial map must not break the build -- it just leaves
+    # entities separate, which is the state before curation.
+    idx = build_index(_multi_entity_df(), min_filings=3, alias_map={}, staffing_map={})
+    names = {e["n"] for e in idx["employers"]}
+    assert "AMAZON COM" in names and "AMAZON WEB" in names
+    assert "Amazon" not in names
