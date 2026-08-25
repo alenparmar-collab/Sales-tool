@@ -109,6 +109,9 @@ def test_pipeline_run_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline, "OUTPUT_PARQUET", tmp_path / "processed" / "dol_filings.parquet")
     monkeypatch.setattr(pipeline, "OUTPUT_CSV", tmp_path / "processed" / "dol_filings.csv")
     monkeypatch.setattr("src.report.PROCESSED_DIR", tmp_path / "processed")
+    # pipeline.run() writes the published site index too. Without this the
+    # test overwrites web/data/index.json -- the file the live site serves.
+    monkeypatch.setattr("src.build_index.DEFAULT_OUTPUT", tmp_path / "index.json")
 
     report = pipeline.run()
 
