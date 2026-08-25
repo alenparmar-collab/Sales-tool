@@ -24,29 +24,37 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.build_index import DEFAULT_OUTPUT  # noqa: E402
+from src.build_index import DEFAULT_OUTPUT, PROCESSED_DIR  # noqa: E402
+
+# Every file a test run can leave behind that a human would then commit as
+# though it were real output. The index is what the site serves; the two
+# CSVs are the inputs to hand curation. All three have been committed as
+# fixtures at least once.
+PROTECTED = [
+    DEFAULT_OUTPUT,
+    PROCESSED_DIR / "top_500_employers.csv",
+    PROCESSED_DIR / "unmatched_titles_top_100.csv",
+]
 
 
 @pytest.fixture(scope="session", autouse=True)
-def protect_published_index(tmp_path_factory):
-    if not DEFAULT_OUTPUT.exists():
-        yield
-        # Nothing was published before the run; anything a test created here
-        # is a fixture and must not be left where the site would serve it.
-        if DEFAULT_OUTPUT.exists():
-            DEFAULT_OUTPUT.unlink()
-        return
-
-    backup = tmp_path_factory.mktemp("published-index") / "index.json"
-    shutil.copy2(DEFAULT_OUTPUT, backup)
-    before = DEFAULT_OUTPUT.stat().st_size
+def protect_published_data(tmp_path_factory):
+    backup_dir = tmp_path_factory.mktemp("published-data")
+    before = {}
+    for path in PROTECTED:
+        if path.exists():
+            shutil.copy2(path, backup_dir / path.name)
+            before[path] = path.stat().st_size
 
     yield
 
-    if not DEFAULT_OUTPUT.exists() or DEFAULT_OUTPUT.stat().st_size != before:
-        shutil.copy2(backup, DEFAULT_OUTPUT)
-        print(
-            f"\n[conftest] Restored {DEFAULT_OUTPUT} -- a test overwrote the "
-            f"published index ({before} bytes). Redirect the output path in "
-            "that test."
-        )
+    for path in PROTECTED:
+        if path in before:
+            if not path.exists() or path.stat().st_size != before[path]:
+                shutil.copy2(backup_dir / path.name, path)
+                print(f"\n[conftest] Restored {path} -- a test overwrote it.")
+        elif path.exists():
+            # Did not exist before the run, so whatever is here now is a
+            # fixture. Leaving it is how it gets committed by accident.
+            path.unlink()
+            print(f"\n[conftest] Removed {path} -- created by a test.")
